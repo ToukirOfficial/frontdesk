@@ -1,0 +1,36 @@
+# Local development: PostgreSQL (with pgvector) and Redis.
+#   docker compose up -d
+# The full self-hosting stack (web, api, worker) is added in a later phase.
+name: frontdesk
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg18
+    environment:
+      POSTGRES_USER: frontdesk
+      POSTGRES_PASSWORD: frontdesk
+      POSTGRES_DB: frontdesk
+    ports: ['127.0.0.1:5432:5432']
+    volumes:
+      - postgres:/var/lib/postgresql
+      - ./docker/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U frontdesk']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports: ['127.0.0.1:6379:6379']
+    volumes:
+      - redis:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres:
+  redis:
