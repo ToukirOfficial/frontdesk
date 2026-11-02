@@ -1,5 +1,5 @@
 # Self-hosting: `docker compose up` runs everything (web, API, worker, PostgreSQL with pgvector, Redis).
-# Fill in .env first (copy .env.example): at least JWT_SECRET, CODE_SECRET, ENCRYPTION_KEY, an AI key, WEB_URL.
+# Fill in .env first (copy .env.example): at least JWT_SECRET, CODE_SECRET, ENCRYPTION_KEY, WEB_URL. An AI key is optional.
 # Local development uses only the databases: `docker compose up -d postgres redis`.
 name: frontdesk
 
@@ -14,13 +14,13 @@ x-app-env: &app-env
   ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in .env}
   SMTP_URL: ${SMTP_URL:-}
   MAIL_FROM: ${MAIL_FROM:-Frontdesk <no-reply@frontdesk.example>}
-  AI_PROVIDER: ${AI_PROVIDER:-anthropic}
-  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-  ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-opus-5-5}
-  ANTHROPIC_EFFORT: ${ANTHROPIC_EFFORT:-low}
-  ANTHROPIC_FALLBACKS: ${ANTHROPIC_FALLBACKS:-default}
+  # Optional instance AI key (bring your own key). Empty: each workspace adds its own in the dashboard.
+  AI_PROVIDER: ${AI_PROVIDER:-}
+  AI_MODEL: ${AI_MODEL:-}
+  AI_API_KEY: ${AI_API_KEY:-}
+  AI_BASE_URL: ${AI_BASE_URL:-}
+  ANTHROPIC_EFFORT: ${ANTHROPIC_EFFORT:-}
   OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-  OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-4.1-mini}
   EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
   STORAGE_DIR: /app/apps/api/storage
   MODEL_CACHE_DIR: /app/apps/api/storage/models
