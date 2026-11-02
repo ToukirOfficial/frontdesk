@@ -1,9 +1,10 @@
 #!/usr/bin/env node
-// Runs the evaluation set against the same prompts, retrieval and providers the app uses.
+// Runs the evaluation set against the same prompts, retrieval and providers the app uses, with YOUR provider:
+// set AI_PROVIDER, AI_MODEL and AI_API_KEY (and AI_BASE_URL for an OpenAI-compatible endpoint such as Ollama) in .env.
 //
-//   pnpm eval            all cases, with AI_PROVIDER / EMBEDDING_PROVIDER from .env (costs a little)
-//   pnpm eval --small    the small subset (CI, when an API key is available)
-//   pnpm eval --dry      no API calls: checks the set and the prompts build (fake model, fake embeddings)
+//   pnpm eval            all cases, against the provider in .env (your key, your cost)
+//   pnpm eval --small    the small subset
+//   pnpm eval --dry      no API calls: checks the set and the prompts build (fake model, fake embeddings). What CI runs.
 //
 // Writes evals/results/latest.json (the README's score comes from there). Needs the API built (pnpm build).
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -12,81 +13,41 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('..', import.meta.url));
 if (existsSync(`${root}.env`)) process.loadEnvFile(`${root}.env`);
 const dist = `${root}apps/api/dist`;
-if (!existsSync(`${dist}/ai/prompts.js`)) {
+if (!existsSync(`${dist}/ai/offline.js`)) {
   console.error('Build the API first: pnpm build');
   process.exit(2);
 }
-
-const { ASSISTANT_TOOLS, PROMPT_VERSION, buildInstructions, buildReference, formatHours } = await import(`${dist}/ai/prompts.js`);
-const { createEmbedder, FakeEmbedder } = await import(`${dist}/ai/embeddings.js`);
-const { chunkText } = await import(`${dist}/knowledge/chunking.js`);
-const { DEMO_BUSINESS, DEMO_FAQS, DEMO_PAGES, DEMO_RULES } = await import(`${dist}/demo/clinic.js`);
 
 const args = new Set(process.argv.slice(2));
 const dry = args.has('--dry');
 const small = args.has('--small');
 
-const env = (k, d = '') => process.env[k] ?? d;
-const config = {
-  AI_PROVIDER: env('AI_PROVIDER', 'anthropic'),
-  ANTHROPIC_API_KEY: env('ANTHROPIC_API_KEY'),
-  ANTHROPIC_MODEL: env('ANTHROPIC_MODEL', 'claude-opus-5-5'),
-  ANTHROPIC_EFFORT: env('ANTHROPIC_EFFORT', 'low'),
-  ANTHROPIC_FALLBACKS: env('ANTHROPIC_FALLBACKS', 'default'),
-  OPENAI_API_KEY: env('OPENAI_API_KEY'),
-  OPENAI_CHAT_MODEL: env('OPENAI_CHAT_MODEL', 'gpt-4.1-mini'),
-  EMBEDDING_PROVIDER: env('EMBEDDING_PROVIDER', 'local'),
-  LOCAL_EMBEDDING_MODEL: env('LOCAL_EMBEDDING_MODEL', 'Xenova/all-MiniLM-L6-v2'),
-  OPENAI_EMBEDDING_MODEL: env('OPENAI_EMBEDDING_MODEL', 'text-embedding-3-small'),
-  MODEL_CACHE_DIR: env('MODEL_CACHE_DIR', `${root}apps/api/storage/models`),
-};
+const { PROMPT_VERSION } = await import(`${dist}/ai/prompts.js`);
+const { createEmbedder, FakeEmbedder } = await import(`${dist}/ai/embeddings.js`);
+const { demoScenario, OfflineAssistant } = await import(`${dist}/ai/offline.js`);
+const { createProvider, instanceSpec } = await import(`${dist}/ai/providers.js`);
+const { loadAiConfig, missingAiSettings } = await import(`${dist}/config.js`);
 
+process.env.MODEL_CACHE_DIR ??= `${root}apps/api/storage/models`;
+const config = dry ? null : loadAiConfig({ ...process.env, NODE_ENV: 'development' });
 let provider;
+let spec = null;
 if (dry) {
   const { FakeChatProvider } = await import(`${dist}/ai/fake.provider.js`);
   provider = new FakeChatProvider();
-} else if (config.AI_PROVIDER === 'openai') {
-  const { OpenAIProvider } = await import(`${dist}/ai/openai.provider.js`);
-  provider = new OpenAIProvider(config);
 } else {
-  const { AnthropicProvider } = await import(`${dist}/ai/anthropic.provider.js`);
-  provider = new AnthropicProvider(config);
+  spec = instanceSpec(config);
+  if (!spec) {
+    const missing = missingAiSettings(config);
+    console.error(`No AI provider configured. Set AI_PROVIDER, AI_MODEL and AI_API_KEY in .env${missing.length ? ` (missing: ${missing.join(', ')})` : ''}, or run pnpm eval --dry.`);
+    process.exit(2);
+  }
+  provider = createProvider(spec, 'development');
 }
-const embedder = dry ? new FakeEmbedder() : createEmbedder(config);
+const assistant = new OfflineAssistant(dry ? new FakeEmbedder() : createEmbedder(config));
 
 const set = JSON.parse(readFileSync(`${root}evals/cases.json`, 'utf8'));
-const clinic = {
-  business: DEMO_BUSINESS,
-  preset: 'clinic',
-  rules: DEMO_RULES,
-  knowledge: [
-    ...DEMO_FAQS.map((f) => ({ title: f.question, content: `Question: ${f.question}\nAnswer: ${f.answer}` })),
-    ...DEMO_PAGES.map((p) => ({ title: p.title, content: p.content })),
-  ],
-};
-const scenarios = { clinic, ...set.scenarios };
-
-const cosine = (a, b) => a.reduce((s, x, i) => s + x * b[i], 0);
-const corpusCache = new Map();
-/** Same chunking and the same top-5 nearest as the app (the app does this in pgvector). */
-const retrieve = async (scenario, extra, question) => {
-  const docs = [...scenario.knowledge, ...(extra ?? [])];
-  const pieces = docs.flatMap((d) =>
-    d.content.startsWith('Question:') ? [{ title: d.title, content: d.content }] : chunkText(`${d.title}\n\n${d.content}`).map((c) => ({ title: d.title, content: c })),
-  );
-  const key = JSON.stringify(pieces);
-  let vectors = corpusCache.get(key);
-  if (!vectors) {
-    vectors = await embedder.embed(pieces.map((p) => p.content));
-    corpusCache.set(key, vectors);
-  }
-  const [q] = await embedder.embed([question]);
-  return pieces
-    .map((p, i) => ({ ...p, score: cosine(q, vectors[i]) }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 5)
-    .map((p, i) => ({ n: i + 1, title: p.title, content: p.content }));
-};
+const scenarios = { clinic: demoScenario(), ...set.scenarios };
 
 const norm = (s) => s.toLowerCase().replace(/[’‘]/g, "'");
 const grade = (c, text, unanswered) => {
@@ -105,26 +66,16 @@ const cases = set.cases.filter((c) => !small || c.small);
 const results = [];
 for (const c of cases) {
   const s = scenarios[c.scenario ?? 'clinic'];
-  const extracts = await retrieve(s, c.extraKnowledge, c.question);
-  const business = { ...s.business, hours: formatHours(s.business.openingHours) };
   let text = '';
   let unanswered = false;
   let error = null;
   try {
-    const r = await provider.stream(
-      {
-        system: buildInstructions({ businessName: s.business.name, preset: s.preset, rules: s.rules }),
-        reference: buildReference(business, extracts),
-        messages: [{ role: 'user', content: c.question }],
-        tools: ASSISTANT_TOOLS,
-        maxTokens: 800,
-      },
-      () => undefined,
-    );
+    const r = await assistant.ask(provider, s, c.question, c.extraKnowledge);
     text = r.text;
-    unanswered = r.toolCalls.some((t) => t.name === 'report_unanswered');
+    unanswered = r.unanswered;
   } catch (err) {
-    error = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    // The name only: a provider's error text can echo request details.
+    error = err instanceof Error ? `${err.name}${typeof err.status === 'number' ? ` (HTTP ${err.status})` : ''}` : 'error';
   }
   const failures = error ? [`error: ${error}`] : grade(c, text, unanswered);
   results.push({ id: c.id, kind: c.kind, pass: failures.length === 0, failures, answer: text, unanswered });
@@ -143,10 +94,9 @@ for (const [k, v] of Object.entries(byKind)) console.log(`  ${k.padEnd(18)} ${v.
 
 if (!dry) {
   mkdirSync(`${root}evals/results`, { recursive: true });
-  const model = config.AI_PROVIDER === 'openai' ? config.OPENAI_CHAT_MODEL : config.ANTHROPIC_MODEL;
   writeFileSync(
     `${root}evals/results/${small ? 'small' : 'latest'}.json`,
-    `${JSON.stringify({ date: new Date().toISOString(), promptVersion: PROMPT_VERSION, provider: config.AI_PROVIDER, model, embeddings: config.EMBEDDING_PROVIDER, passed, total: results.length, byKind, results }, null, 2)}\n`,
+    `${JSON.stringify({ date: new Date().toISOString(), promptVersion: PROMPT_VERSION, provider: spec.provider, model: spec.model, embeddings: config.EMBEDDING_PROVIDER, passed, total: results.length, byKind, results }, null, 2)}\n`,
   );
 }
 // CI (--small) fails if anything in the small set fails. Dry runs only check that everything builds and runs.

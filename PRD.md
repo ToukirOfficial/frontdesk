@@ -32,7 +32,10 @@ Small businesses (clinics, solicitors, salons, cleaners, tutors, restaurants) ge
 8. Per-workspace rules in plain English, e.g. "Never give legal advice; offer a consultation instead." Built-in presets: Law firm, Clinic, General business.
 9. Guardrails: resists prompt injection ("ignore your instructions"), stays on topic, never reveals its system prompt or other businesses' data, and refuses harmful requests.
 10. Answers stream word by word.
-11. AI provider is swappable by env: Anthropic Claude (default) or OpenAI.
+11. **Bring your own key.** No AI provider is built in or paid for by the project. Providers: Anthropic, OpenAI, Google Gemini, and a generic OpenAI-compatible endpoint (base URL + model), which also covers self-hosted models with Ollama. Provider and model always come from configuration, never hard-coded.
+    - **Instance key (optional):** a self-hoster can set one provider, model and key in `.env` for every workspace.
+    - **Workspace key:** Settings → AI provider. A business picks a provider and model and pastes its own key. Encrypted at rest (AES-256-GCM, key from env), write-only (never returned by the API; only the last 4 characters are shown), never logged. A "Test key" button makes one tiny request. A workspace key overrides the instance key. The monthly spend cap and rate limits still apply.
+    - **No key at all:** the app starts and works. The chat shows a clear "No AI provider configured" state (visitors can still leave a message or ask for a person) and the dashboard shows a setup card explaining how to add one.
 
 **Enquiries and bookings**
 12. Collects an enquiry inside the chat (name, email or phone, what they need), with consent text, and emails it to the business.
@@ -53,10 +56,14 @@ Small businesses (clinics, solicitors, salons, cleaners, tutors, restaurants) ge
 19. Rate limit per visitor and per workspace; a monthly AI spend cap per workspace (tracked in tokens); when the cap is hit, the widget switches to "leave a message" mode.
 
 **Quality**
-20. An evaluation set in the repo: questions with expected behaviour (correct answer from knowledge, honest "I don't know", refuses legal advice, resists prompt injection). A command runs it and prints a score. CI runs a small version.
+20. An evaluation set in the repo: questions with expected behaviour (correct answer from knowledge, honest "I don't know", refuses legal advice, resists prompt injection). A command runs it against whatever provider the person configures and prints a score. Tests and CI use only the fake provider (CI dry-runs the set); no API key is ever needed to build or test.
 
 **Demo mode**
-21. `DEMO_MODE=true`: a seeded demo business (a fictional physiotherapy clinic) with knowledge loaded, a demo page showing the widget on a fake website, a strict per-visitor message limit and a hard monthly cap, no real emails, nightly reset.
+21. `DEMO_MODE=true`: a seeded demo business (a fictional physiotherapy clinic) with knowledge loaded, a demo page showing the widget on a fake website, no real emails, nightly reset, and **zero AI cost to the host**:
+    - **Replay (default):** visitors pick from suggested questions; answers come from a recorded set in the repo, clearly labelled "Demo: sample answers". The demo never uses the instance key.
+    - **Try with your own key (optional):** a visitor pastes their own Anthropic, OpenAI or Gemini key to get live answers about the demo clinic. The key is encrypted, tied to their demo session only, deleted after 24 hours, never logged, with strict rate limits.
+    - Everything else in the demo (dashboard, knowledge, enquiries, handover) works for real.
+    - A script records the replay set from any configured provider.
 
 **Self-hosting**
 22. `docker compose up` runs web, API, worker, PostgreSQL (with pgvector) and Redis.
@@ -65,6 +72,7 @@ Small businesses (clinics, solicitors, salons, cleaners, tutors, restaurants) ge
 
 - First token of an answer in under 2 seconds on a normal connection.
 - Real-time over WebSockets, working across more than one API instance (Redis pub/sub).
+- Starts and runs with no AI key; nothing depends on the maintainer's key or machine.
 - UK English. No real personal data in seeds, tests, logs or evaluation files. Conversation data retention configurable (default 90 days).
 
 ## 5. README must include
@@ -78,5 +86,5 @@ Voice and phone calls, WhatsApp/Messenger channels, payments, multiple languages
 ## 7. Done means
 
 - A business can add knowledge, embed the widget, and get grounded, streamed answers; enquiries arrive by email; staff can take over a chat live; unanswered questions are listed.
-- Tests pass for login, permissions, workspace isolation (no cross-workspace retrieval), rate limits and spend cap.
-- Evaluation set runs and its score is in the README. Demo live, `docker compose up` works from a clean machine.
+- Tests pass for login, permissions, workspace isolation (no cross-workspace retrieval), rate limits and spend cap; the app boots with no key; workspace keys are never returned by the API or written to logs; demo keys expire and are deleted; a workspace can never use another workspace's key.
+- Evaluation set runs against a configured provider and its score is in the README once someone runs it with their own key. Demo live in replay mode at no cost, `docker compose up` works from a clean machine with no AI key.

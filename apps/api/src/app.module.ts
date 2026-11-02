@@ -10,9 +10,9 @@ import { AuthService } from './auth/auth.service.js';
 import { SessionsService } from './auth/sessions.service.js';
 import type { AppConfig } from './config.js';
 import { CoreModule } from './core.module.js';
-import { CHAT_PROVIDER } from './ai/chat-provider.js';
+import { AiSettingsController } from './ai/ai-settings.controller.js';
+import { AiSettingsService } from './ai/ai-settings.service.js';
 import { createEmbedder, EMBEDDER } from './ai/embeddings.js';
-import { createChatProvider } from './ai/providers.js';
 import { AssistantService } from './chat/assistant.service.js';
 import { VisitorGateway } from './chat/visitor.gateway.js';
 import { WidgetController } from './chat/widget.controller.js';
@@ -52,6 +52,9 @@ class WorkspacesModule {}
 @Module({ controllers: [BusinessController], providers: [BusinessService], exports: [BusinessService] })
 class BusinessModule {}
 
+@Module({ controllers: [AiSettingsController], providers: [AiSettingsService] })
+class AiSettingsModule {}
+
 @Module({ controllers: [KnowledgeController], providers: [KnowledgeService], exports: [KnowledgeService] })
 class KnowledgeModule {}
 
@@ -70,7 +73,6 @@ class KnowledgeModule {}
     VisitorGateway,
     VectorStore,
     { provide: EMBEDDER, useFactory: createEmbedder, inject: [APP_CONFIG] },
-    { provide: CHAT_PROVIDER, useFactory: createChatProvider, inject: [APP_CONFIG] },
   ],
   exports: [WidgetService],
 })
@@ -82,7 +84,7 @@ export class AppModule {
   static forConfig(config: AppConfig): DynamicModule {
     return {
       module: AppModule,
-      imports: [CoreModule.forConfig(config), AuthModule, WorkspacesModule, BusinessModule, KnowledgeModule, ChatModule],
+      imports: [CoreModule.forConfig(config), AuthModule, WorkspacesModule, BusinessModule, AiSettingsModule, KnowledgeModule, ChatModule],
       controllers: [HealthController, DemoController],
       providers: [{ provide: APP_GUARD, useClass: AuthGuard }, DemoService],
     };

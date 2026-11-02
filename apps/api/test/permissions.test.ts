@@ -34,6 +34,9 @@ const PUBLIC_ROUTES = new Set([
   'POST /widget/:publicKey/booking/services',
   'POST /widget/:publicKey/booking/slots',
   'POST /widget/:publicKey/booking',
+  // Demo clinic only (404 elsewhere): a visitor's own AI key for their demo chat.
+  'POST /widget/:publicKey/demo-key',
+  'DELETE /widget/:publicKey/demo-key',
 ]);
 
 describe('deny by default', () => {

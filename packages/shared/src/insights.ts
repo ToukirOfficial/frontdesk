@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { aiSourceSchema } from './ai.js';
 import { instantSchema } from './common.js';
 import { enquirySchema } from './handover.js';
 
@@ -43,6 +44,8 @@ export const usageSchema = z.object({
   enquiries: z.number().int(),
   openUnanswered: z.number().int(),
   retentionDays: z.number().int(),
+  /** Who answers: the workspace's own key, the server's key, nobody yet (setup card), or the demo. */
+  ai: aiSourceSchema,
 });
 export type Usage = z.infer<typeof usageSchema>;
 

@@ -114,6 +114,7 @@ model Workspace {
   unanswered    UnansweredQuestion[]
   usage         UsageMonth[]
   enquiries     Enquiry[]
+  ai            AiSettings?
 
   @@map("workspaces")
 }
@@ -376,4 +377,25 @@ model Enquiry {
   @@index([workspaceId, createdAt])
   @@index([conversationId])
   @@map("enquiries")
+}
+
+/// The workspace's own AI provider (bring your own key). Overrides the instance key from .env.
+model AiSettings {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  workspaceId String   @unique @map("workspace_id") @db.Uuid
+  /// anthropic, openai, gemini or openai-compatible (validated by the shared Zod schema)
+  provider    String
+  model       String
+  /// OpenAI-compatible endpoints only
+  baseUrl     String?  @map("base_url")
+  /// AES-256-GCM sealed API key. Never returned by the API. Null for keyless endpoints (e.g. Ollama).
+  keyCipher   String?  @map("key_cipher")
+  /// The only part of the key ever shown again.
+  keyLast4    String?  @map("key_last4")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@map("ai_settings")
 }

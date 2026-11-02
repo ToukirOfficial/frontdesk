@@ -1,0 +1,50 @@
+{
+  "about": "Sample answers for the public demo's replay mode, about the fictional Riverside Physio clinic. Re-record them from any provider with: pnpm --filter @frontdesk/api demo:record",
+  "recordedWith": "hand-written from the demo clinic's knowledge (not yet recorded from a model)",
+  "recordedAt": null,
+  "promptVersion": "v1",
+  "items": [
+    {
+      "question": "How much is a first appointment?",
+      "answer": "Your first appointment is an initial assessment and treatment, lasting 60 minutes, and costs £65. It includes a full assessment of your problem and your medical history, and most people also get their first treatment and a home exercise plan in the same session.",
+      "sources": [{ "title": "Prices", "url": null }, { "title": "Your first appointment", "url": null }],
+      "unanswered": false
+    },
+    {
+      "question": "Are you open on Saturdays?",
+      "answer": "Yes, we’re open on Saturdays from 09:00 to 13:00. We’re closed on Sundays and bank holidays.",
+      "sources": [],
+      "unanswered": false
+    },
+    {
+      "question": "Is there parking?",
+      "answer": "Yes. There’s free parking for 12 cars behind the clinic, including 2 disabled bays. Enter from Mill Road.",
+      "sources": [{ "title": "Is there parking?", "url": null }],
+      "unanswered": false
+    },
+    {
+      "question": "Do I need a GP referral?",
+      "answer": "No, you don’t need a referral. You can book directly with us. Your first appointment includes a full assessment.",
+      "sources": [{ "title": "Do I need a GP referral?", "url": null }],
+      "unanswered": false
+    },
+    {
+      "question": "Do you accept health insurance?",
+      "answer": "Yes. We’re registered with Bupa, AXA Health, Aviva and Vitality. Please bring your membership number and authorisation code to your appointment.",
+      "sources": [{ "title": "Do you accept health insurance?", "url": null }],
+      "unanswered": false
+    },
+    {
+      "question": "My knee hurts when I run. What's wrong with it?",
+      "answer": "I’m sorry, I can’t diagnose injuries or give medical advice. The best next step is to book an assessment with one of our physiotherapists, who can look at your knee properly. The first appointment includes a full assessment. If the pain is severe or came on after a fall, please call NHS 111.",
+      "sources": [],
+      "unanswered": false
+    },
+    {
+      "question": "Do you offer hydrotherapy?",
+      "answer": "I’m sorry, I don’t have that information. I can take a message for the team, or pass you to a member of staff.",
+      "sources": [],
+      "unanswered": true
+    }
+  ]
+}

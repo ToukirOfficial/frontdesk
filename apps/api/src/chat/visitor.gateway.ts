@@ -17,7 +17,9 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { RedisService } from '../redis/redis.service.js';
 import { ConversationsService } from '../handover/conversations.service.js';
 import { UsageService } from '../insights/usage.service.js';
-import { AssistantService } from './assistant.service.js';
+import { AiResolver } from '../ai/ai-resolver.js';
+import { findReplay } from '../demo/replay.js';
+import { type ReplyResult, AssistantService, FALLBACK_ERROR } from './assistant.service.js';
 import { conversationRoom, RealtimeService } from './realtime.service.js';
 import { clientIp } from './client-ip.js';
 import { toChatMessage, WidgetService } from './widget.service.js';
@@ -29,6 +31,13 @@ interface VisitorData {
   visitorId: string;
   ip: string;
 }
+
+export const NO_PROVIDER_NOTE =
+  'No AI provider is configured yet, so the assistant can’t answer. You can leave a message or ask for a person.';
+export const REPLAY_ONLY_NOTE =
+  'This demo answers the suggested questions with sample answers. To ask anything else, add your own AI key in the chat.';
+/** Shown on every replayed answer. */
+export const DEMO_LABEL = 'Demo: sample answer';
 
 type VisitorSocket = Socket<Record<string, never>, VisitorServerEvents, Record<string, never>, VisitorData>;
 
@@ -51,6 +60,7 @@ export class VisitorGateway implements OnGatewayInit, OnGatewayConnection {
     @Inject(RealtimeService) private readonly realtime: RealtimeService,
     @Inject(ConversationsService) private readonly conversations: ConversationsService,
     @Inject(UsageService) private readonly usage: UsageService,
+    @Inject(AiResolver) private readonly ai: AiResolver,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
@@ -113,19 +123,8 @@ export class VisitorGateway implements OnGatewayInit, OnGatewayConnection {
       this.realtime.toVisitor(conversation.id, 'message', dto);
       this.realtime.staffMessage(data.workspaceId, conversation.id, dto);
 
-      // While a person has the chat, the assistant stays quiet. Over the monthly cap, it's leave-a-message only.
-      if (conversation.mode === 'ai') {
-        if (await this.usage.capReached(data.workspaceId)) {
-          await this.conversations.system(
-            data.workspaceId,
-            conversation.id,
-            'Our assistant isn’t available right now. Please leave a message and the team will get back to you.',
-          );
-          this.realtime.toVisitor(conversation.id, 'handover:unavailable');
-        } else {
-          await this.answer(data, parsed.data.text);
-        }
-      }
+      // While a person has the chat, the assistant stays quiet.
+      if (conversation.mode === 'ai') await this.respond(data, conversation.id, parsed.data.text);
       await this.conversations.broadcast(data.workspaceId, conversation.id);
       return { ok: true };
     } finally {
@@ -133,18 +132,53 @@ export class VisitorGateway implements OnGatewayInit, OnGatewayConnection {
     }
   }
 
-  private async answer(data: VisitorData, question: string): Promise<void> {
+  /** No provider: say so. Demo without a visitor key: replay. Over the monthly cap: leave-a-message only. */
+  private async respond(data: VisitorData, conversationId: string, question: string): Promise<void> {
+    const ai = await this.ai.forChat(data.workspaceId, data.isDemo, conversationId);
+    if (ai.kind === 'none') {
+      await this.conversations.system(data.workspaceId, conversationId, NO_PROVIDER_NOTE);
+      return;
+    }
+    if (ai.kind === 'replay') {
+      if (!findReplay(question)) await this.conversations.system(data.workspaceId, conversationId, REPLAY_ONLY_NOTE);
+      else await this.answer(data, DEMO_LABEL, (onText) => this.assistant.replay(data.workspaceId, conversationId, question, onText));
+      return;
+    }
+    if (await this.usage.capReached(data.workspaceId)) {
+      await this.conversations.system(
+        data.workspaceId,
+        conversationId,
+        'Our assistant isn’t available right now. Please leave a message and the team will get back to you.',
+      );
+      this.realtime.toVisitor(conversationId, 'handover:unavailable');
+      return;
+    }
+    await this.answer(data, null, (onText) => this.assistant.reply(data.workspaceId, conversationId, question, onText, ai.provider));
+  }
+
+  /** Streams one reply and saves it. */
+  private async answer(
+    data: VisitorData,
+    authorName: string | null,
+    produce: (onText: (t: string) => void) => Promise<ReplyResult | null>,
+  ): Promise<void> {
     const room = this.ns.to(conversationRoom(data.conversationId));
     const tempId = `pending-${Date.now()}`;
     room.emit('reply:start', { id: tempId });
-    const result = await this.assistant.reply(data.workspaceId, data.conversationId, question, (text) =>
-      room.emit('reply:delta', { id: tempId, text }),
-    );
+    const result = (await produce((text) => room.emit('reply:delta', { id: tempId, text }))) ?? {
+      text: FALLBACK_ERROR,
+      sources: [],
+      unanswered: false,
+      inputTokens: 0,
+      outputTokens: 0,
+      failed: true,
+    };
     const saved = await this.prisma.message.create({
       data: {
         conversationId: data.conversationId,
         workspaceId: data.workspaceId,
         role: 'assistant',
+        authorName,
         content: result.text,
         sources: result.sources,
         inputTokens: result.inputTokens,

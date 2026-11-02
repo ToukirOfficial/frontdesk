@@ -22,6 +22,9 @@ Monorepo: `apps/web` (Next.js 16.4 — moved from 16.3 because every 16.3.x rele
 | `Enquiry` | workspaceId, conversationId?, name, contact, need, consentAt, emailedAt |
 | `UnansweredQuestion` | workspaceId, conversationId, question, resolvedAt |
 | `UsageMonth` | workspaceId, month (`YYYY-MM`), inputTokens, outputTokens (unique pair) |
+| `AiSettings` | workspaceId (1:1), provider `anthropic/openai/gemini/openai_compatible`, model, baseUrl (OpenAI-compatible only), keyCipher (AES-256-GCM, never returned, nullable for keyless Ollama), keyLast4 |
+
+Demo visitor keys are **not** in PostgreSQL: they live in Redis as `demo-key:<conversationId>` (AES-256-GCM sealed JSON) with a 24-hour TTL, so Redis deletes them on time; the nightly demo reset also removes any left.
 
 ## NestJS modules
 
@@ -29,7 +32,8 @@ Monorepo: `apps/web` (Next.js 16.4 — moved from 16.3 because every 16.3.x rele
 - **workspaces** — workspace CRUD, members, invites, roles.
 - **business** — business profile and assistant settings (rules, presets, widget look, Slotwise connection).
 - **knowledge** — sources CRUD, file upload (PDF/DOCX, magic-byte check, random name outside public dirs), URL import request; jobs to queue.
-- **ai** — provider interface (`streamChat` with tools, `embed`), Anthropic + OpenAI chat, local + OpenAI embeddings, a `FakeProvider` for tests; model names from env; prompts in `apps/api/prompts/*.md` (versioned).
+- **ai** — provider interface (`stream` with tools, `ping` for "Test key"), Anthropic, OpenAI, Gemini and OpenAI-compatible chat (the last two via the `openai` SDK with a base URL), local + OpenAI embeddings, a `FakeProvider` for tests; `AiResolver` picks the provider per message: demo workspace → visitor's own key or replay; otherwise workspace key → instance key → none. Provider and model always from config, no default model. Prompts in `apps/api/prompts/*.md` (versioned).
+- **ai settings** — workspace key CRUD (write-only, last 4 shown), test key; status shown on the overview.
 - **retrieval** — chunking, workspace-scoped vector search, prompt assembly.
 - **chat** — WebSocket gateway (Socket.IO + Redis adapter), visitor sessions, streaming, sources, enquiry capture.
 - **handover** — staff presence (Redis), atomic take over / hand back, fallback to enquiry when nobody is online.
@@ -43,22 +47,23 @@ Monorepo: `apps/web` (Next.js 16.4 — moved from 16.3 because every 16.3.x rele
 
 - Auth (public, rate-limited): `POST /auth/register`, `/auth/login`, `/auth/verify-code`, `/auth/refresh`, `/auth/logout`; `GET /auth/me`.
 - Workspaces: `GET/POST /workspaces`, `GET/PATCH /workspaces/:id`, `GET/PATCH/DELETE /workspaces/:id/members[/:userId]`, `GET/POST/DELETE /workspaces/:id/invites`, `GET /invites/:token`, `POST /invites/accept`.
-- Settings: `GET/PUT /workspaces/:id/business`, `GET/PUT /workspaces/:id/assistant`, `PUT/DELETE /workspaces/:id/slotwise`.
+- Settings: `GET/PUT /workspaces/:id/business`, `GET/PUT /workspaces/:id/assistant`, `PUT/DELETE /workspaces/:id/slotwise`, `GET/PUT/DELETE /workspaces/:id/ai`, `POST /workspaces/:id/ai/test` (owner/admin).
 - Knowledge: `GET/POST /workspaces/:id/knowledge`, `GET/PATCH/DELETE .../knowledge/:sourceId`, `POST .../knowledge/upload`, `POST .../knowledge/import-url`, `GET .../knowledge/:sourceId/file`.
 - Conversations: `GET /workspaces/:id/conversations?q=`, `GET .../conversations/:cid`, `POST .../conversations/:cid/takeover`, `/handback`, `/messages`.
 - Insights: `GET /workspaces/:id/enquiries`, `GET/PATCH /workspaces/:id/unanswered[/:qid]`, `GET /workspaces/:id/usage`.
-- Widget (public, by `publicKey`, origin-checked): `GET /widget/:publicKey/config`, `POST /widget/:publicKey/session`.
+- Widget (public, by `publicKey`, origin-checked): `GET /widget/:publicKey/config` (now says `ai: ready/none/replay`, plus suggested questions in replay), `POST /widget/:publicKey/session`; demo only: `POST/DELETE /widget/:publicKey/demo-key` (visitor token in the body).
 - WebSockets: `/visitor` (message, stream, enquiry, booking) and `/staff` (live list, presence, takeover, reply).
 
 Roles: Owner = everything incl. members and delete workspace; Admin = settings, knowledge, conversations, invites (not Owner role); Staff = conversations, enquiries, unanswered.
 
 ## Pages (`apps/web`, shadcn/ui, mobile responsive)
 
-`/login`, `/login/code`, `/register`, `/invite/[token]` · `/w/[id]` overview · `/w/[id]/knowledge` · `/w/[id]/business` · `/w/[id]/assistant` (rules, presets, widget look, embed snippet, Slotwise) · `/w/[id]/conversations` · `/w/[id]/enquiries` · `/w/[id]/unanswered` · `/w/[id]/team` · `/demo`.
+`/login`, `/login/code`, `/register`, `/invite/[token]` · `/w/[id]` overview · `/w/[id]/knowledge` · `/w/[id]/business` · `/w/[id]/assistant` (rules, presets, widget look, embed snippet, Slotwise) · `/w/[id]/conversations` · `/w/[id]/enquiries` · `/w/[id]/unanswered` · `/w/[id]/team` · `/w/[id]/ai` (AI provider: provider, model, key, Test key) · `/demo`. The overview shows a setup card when no provider is configured.
 
 ## Security and grounding details
 
 - **SSRF (URL import):** HTTPS only in production (HTTP allowed in dev), same domain as the start URL, page and size limits. Resolve DNS ourselves, reject loopback, private, link-local, CGNAT, multicast, unspecified and cloud metadata ranges (IPv4 and IPv6, incl. IPv4-mapped) with `net.BlockList`, then connect to the vetted IP (pinned `lookup`, SNI kept). No redirects followed (a redirect to the same domain is re-vetted as a new URL). 10 s timeout, 2 MB body limit, HTML only. Tested.
+- **AI keys:** workspace keys and demo visitor keys are AES-256-GCM encrypted (`ENCRYPTION_KEY`), never returned (only the last 4 characters), never logged: provider errors are reduced to a fixed category (bad key, rate limited, model not found, unreachable) before they reach logs or the user. A workspace's OpenAI-compatible base URL is an admin-typed address, so it goes through the same SSRF guard as website import (DNS vetted, pinned connection, no private addresses in production, streamed with a timeout); only the instance's own `.env` may point at localhost (e.g. Ollama). Demo visitors may use Anthropic, OpenAI or Gemini only (fixed hosts).
 - **Slotwise key:** stored AES-256-GCM encrypted (`ENCRYPTION_KEY` env, 32 bytes, random IV per value); the API only ever returns `connected: true/false`.
 - **Indirect prompt injection:** business details, knowledge chunks and imported pages go in the prompt inside labelled `<untrusted_data>` blocks with an instruction that they are reference material, never instructions. Eval cases include chunks containing injected instructions.
 - **"Don't know" signal:** the model is given a `report_unanswered` tool (and `cite_sources`); unanswered questions are recorded from that tool call, never by matching the answer text. Leaving a message, booking and asking for a person are always-visible widget buttons rather than model tools (simpler, and the reply text already offers them).
@@ -73,7 +78,7 @@ Base URL + `/api/v1`, header `Authorization: Bearer sw_live_<prefix>_<secret>`. 
 
 ## Libraries (approved)
 
-`@anthropic-ai/sdk`, `openai`, `@huggingface/transformers` (local all-MiniLM-L6-v2, 384 dims; `EMBEDDING_PROVIDER=local|openai`, OpenAI uses `text-embedding-3-small` at 384 dims), `argon2`, `@nestjs/websockets` + `@nestjs/platform-socket.io` + `socket.io` + `@socket.io/redis-adapter`, `nodemailer`, **`unpdf`** (maintained PDF.js-based text extraction, replaces pdf-parse; run with a timeout and page limit), `mammoth` (DOCX), `file-type`, `cheerio`, `uuidv7`. Widget: plain Web Component, Shadow DOM, no framework.
+`@anthropic-ai/sdk`, `openai` (also for Gemini and OpenAI-compatible endpoints), `@huggingface/transformers` (local all-MiniLM-L6-v2, 384 dims; `EMBEDDING_PROVIDER=local|openai`, OpenAI uses `text-embedding-3-small` at 384 dims), `argon2`, `@nestjs/websockets` + `@nestjs/platform-socket.io` + `socket.io` + `@socket.io/redis-adapter`, `nodemailer`, **`unpdf`** (maintained PDF.js-based text extraction, replaces pdf-parse; run with a timeout and page limit), `mammoth` (DOCX), `file-type`, `cheerio`, `uuidv7`. Widget: plain Web Component, Shadow DOM, no framework.
 
 ## Build phases
 
@@ -84,8 +89,10 @@ Base URL + `/api/v1`, header `Authorization: Bearer sw_live_<prefix>_<secret>`. 
 5. **Limits, insights, retention** — IP/visitor/workspace limits, monthly token cap, insights pages, retention job. Tests: rate limits, spend cap, retention.
 6. **Evals, demo, self-hosting, docs** — eval set (grounded answer, honest "I don't know", refuses legal advice, direct and indirect injection) + `pnpm eval`; small CI eval; `DEMO_MODE` seed, demo page, nightly reset; Dockerfiles, `docker compose up`; README, `ASSUMPTIONS.md`, decision notes.
 
+7. **Bring your own key** (change of plan, 2026-11-02) — instance key from `.env` optional; providers Anthropic, OpenAI, Gemini, OpenAI-compatible; app boots and works with no key ("No AI provider configured" in the widget, setup card on the overview); `AiSettings` + Settings → AI provider page with Test key; demo replay mode with suggested questions and a recorded set (`apps/api/src/demo/replay.json`, `pnpm --filter @frontdesk/api demo:record`), optional visitor key in Redis with a 24 h TTL; CI fake-only; eval runner uses the configured provider. Tests: boots with no key, keys never returned or logged, demo keys expire and are deleted, no cross-workspace key use.
+
 Each phase ends with `pnpm typecheck && pnpm lint && pnpm test && pnpm build`, the security sweep and `pnpm audit`, then is marked done here.
 
 ## Progress
 
-- [x] Phase 1 (2026-11-02: 34 API tests, typecheck/lint/build clean, audit has no high/critical) · [x] Phase 2 (2026-11-02: 87 API tests; local embedding model not run here, Hugging Face is blocked in this environment) · [x] Phase 3 (2026-11-02: 99 API tests; widget checked in a browser through the proxy; real model replies not run here, no API key) · [x] Phase 4 (2026-11-02: 117 API tests; handover checked in two browsers) · [x] Phase 5 (2026-11-02: 124 API tests) · [x] Phase 6 (2026-11-02: 130 API tests; `docker compose up` checked from clean; eval set dry-run only, no API key here)
+- [x] Phase 1 (2026-11-02: 34 API tests, typecheck/lint/build clean, audit has no high/critical) · [x] Phase 2 (2026-11-02: 87 API tests; local embedding model not run here, Hugging Face is blocked in this environment) · [x] Phase 3 (2026-11-02: 99 API tests; widget checked in a browser through the proxy; real model replies not run here, no API key) · [x] Phase 4 (2026-11-02: 117 API tests; handover checked in two browsers) · [x] Phase 5 (2026-11-02: 124 API tests) · [x] Phase 6 (2026-11-02: 130 API tests; `docker compose up` checked from clean; eval set dry-run only, no API key here) · [x] Phase 7 (2026-11-02: 147 API tests; typecheck/lint/build clean, audit has no high/critical; no real provider called, no key here)

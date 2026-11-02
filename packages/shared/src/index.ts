@@ -6,3 +6,4 @@ export * from './knowledge.js';
 export * from './chat.js';
 export * from './handover.js';
 export * from './insights.js';
+export * from './ai.js';
