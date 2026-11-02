@@ -37,16 +37,17 @@ describe('deny by default', () => {
 
     for (const wrapper of discovery.getControllers()) {
       const instance = wrapper.instance as object | undefined;
-      if (!instance) continue;
+      const controller = wrapper.metatype as (() => unknown) | null;
+      if (!instance || !controller) continue;
       const proto = Object.getPrototypeOf(instance) as object;
-      const base = String(Reflect.getMetadata(PATH_METADATA, wrapper.metatype) ?? '').replace(/^\/|\/$/g, '');
+      const base = String(Reflect.getMetadata(PATH_METADATA, controller) ?? '').replace(/^\/|\/$/g, '');
       for (const name of scanner.getAllMethodNames(proto)) {
         const handler = (proto as Record<string, unknown>)[name] as () => unknown;
         const path = Reflect.getMetadata(PATH_METADATA, handler) as string | undefined;
         if (path === undefined) continue;
         const method = RequestMethod[Reflect.getMetadata(METHOD_METADATA, handler) as number];
         const route = `${method} /${[base, path].filter((p) => p && p !== '/').join('/')}`;
-        const targets = [handler, wrapper.metatype as () => unknown];
+        const targets = [handler, controller];
         const isPublic = reflector.getAllAndOverride<boolean>(IS_PUBLIC, targets);
         const loggedIn = reflector.getAllAndOverride<boolean>(LOGGED_IN, targets);
         const roles = reflector.getAllAndOverride<string[]>(ROLES, targets);
