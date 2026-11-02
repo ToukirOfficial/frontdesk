@@ -1,10 +1,30 @@
 # Frontdesk
 
+[![CI](https://github.com/ToukirOfficial/frontdesk/actions/workflows/ci.yml/badge.svg)](https://github.com/ToukirOfficial/frontdesk/actions/workflows/ci.yml)
+[![Licence: AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue)](LICENSE)
+
 A free, open-source, self-hosted AI receptionist for small business websites. It answers visitors’ questions from the business’s own information, takes enquiries, books appointments and hands over to a person when it isn’t sure.
 
 > Demo GIF: to be recorded from the live demo.
 
 **Bring your own key:** works with Anthropic, OpenAI, Gemini or any OpenAI-compatible endpoint, including self-hosted models with Ollama. The project ships no AI model and pays for none: you (or each business) add a key, and the provider bills you directly. With no key at all, Frontdesk still starts and everything except AI answers works.
+
+## Contents
+
+- [What it does](#what-it-does)
+- [Why it exists](#why-it-exists)
+- [Add the widget to a website](#add-the-widget-to-a-website)
+- [Self-host with Docker](#self-host-with-docker)
+  - [AI providers](#ai-providers)
+- [The public demo](#the-public-demo)
+- [How answers stay grounded](#how-answers-stay-grounded)
+- [The evaluation set](#the-evaluation-set)
+- [Architecture](#architecture)
+- [Hard problems and decisions](#hard-problems-and-decisions)
+- [Security](#security)
+- [Tests](#tests)
+- [Local development](#local-development)
+- [Licence](#licence)
 
 ## What it does
 
@@ -99,6 +119,27 @@ pnpm eval --dry                # no API calls: checks the set and prompts build 
 ```
 
 **Latest score:** not measured yet. The project has no AI key of its own. Run `pnpm eval` with yours and the result, including the provider and model, is saved to `evals/results/latest.json`.
+
+## Architecture
+
+```
+apps/web          Next.js: the dashboard, the landing page and the /demo page; proxies /api to the API
+apps/api          NestJS + Prisma: the HTTP API and WebSocket gateways (src/main.ts), and the BullMQ
+                  worker (src/worker.ts) for embedding, website import, file parsing, email and nightly jobs
+packages/shared   Zod schemas and types, shared by both apps
+packages/widget   The <frontdesk-chat> Web Component, built to one file (widget.js)
+evals/            The evaluation set (cases.json) and its runner (run.mjs)
+```
+
+**A visitor’s question:** widget → WebSocket (Socket.IO) → NestJS → retrieval of the 5 nearest chunks from that workspace in PostgreSQL/pgvector → AI provider (the workspace’s key, else the server’s) → the answer streamed back over the same socket.
+
+| Choice | Why |
+|---|---|
+| **pgvector in PostgreSQL**, not a separate vector database | One database to run and back up on a small server. Every search filters by workspace, using iterative index scans so the filter still returns k results ([0001](docs/decisions/0001-filtered-vector-search.md)). |
+| **Tool calls for “I don’t know”** (`report_unanswered`, `cite_sources`) | Gaps and sources are structured signals, never guessed from the answer’s wording. The model has only these two harmless tools ([0002](docs/decisions/0002-grounding-and-prompt-injection.md)). |
+| **WebSockets with the Redis adapter** | Handover needs both directions and presence. The adapter lets any API instance reach any conversation, and “online” is just a staff socket in the workspace’s room ([0003](docs/decisions/0003-realtime-and-handover.md)). |
+| **A Web Component widget** with Shadow DOM | One script tag and one HTML tag on any site. The host page’s CSS can’t break it, and it can’t leak styles out. |
+| **Bring your own key** | The project pays for no AI. Each business uses its own provider and model, with keys encrypted at rest. With no key, everything except AI answers still works ([0004](docs/decisions/0004-bring-your-own-key.md)). |
 
 ## Hard problems and decisions
 
