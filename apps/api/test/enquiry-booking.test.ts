@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { as, lastEmailTo, registerOwner, reset, startApp, type TestApp } from './helpers.js';
+import { addMember, as, lastEmailTo, registerOwner, reset, startApp, type TestApp } from './helpers.js';
 import { keyOf, widgetSession } from './socket-helpers.js';
 
 const KEY = 'sw_live_abc123_secretpart';
@@ -97,11 +97,25 @@ describe('enquiries', () => {
     const row = await t.prisma.enquiry.findFirstOrThrow({ where: { workspaceId: owner.workspaceId } });
     expect(row).toMatchObject({ name: 'Alex Example', email: 'alex@example.test', phone: null, need: 'Can I bring my dog?', conversationId: s.conversationId });
     expect(row.consentText).toContain('Riverside Physio');
-    const mail = await lastEmailTo(t, 'hello@riverside.example');
+    // The contact email isn't a member's (unverified), so it gets nothing: the owner does.
+    await expect(lastEmailTo(t, 'hello@riverside.example')).rejects.toThrow();
+    const mail = await lastEmailTo(t, owner.email);
     expect(mail.subject).toContain('Alex Example');
     expect(mail.text).toContain('Can I bring my dog?');
     const note = await t.prisma.message.findFirstOrThrow({ where: { conversationId: s.conversationId, role: 'system' } });
     expect(note.content).toContain('passed to the team');
+  });
+
+  it('emails admins too, and the contact address when it belongs to a member', async () => {
+    const owner = await registerOwner(t);
+    const admin = await addMember(t, owner, 'admin');
+    const staff = await addMember(t, owner, 'staff');
+    const profile = (await as(t, owner).get(`/api/workspaces/${owner.workspaceId}/business`).expect(200)).body;
+    await as(t, owner).put(`/api/workspaces/${owner.workspaceId}/business`, { ...profile, email: staff.email }).expect(200);
+    const key = await keyOf(t, owner);
+    const s = await widgetSession(t, key);
+    await t.http.post(`/api/widget/${key}/enquiry`).send(body(s.token)).expect(201);
+    for (const to of [owner.email, admin.email, staff.email]) expect((await lastEmailTo(t, to)).text).toContain('Can I bring my dog?');
   });
 
   it('emails the owner when the business has no contact email', async () => {
