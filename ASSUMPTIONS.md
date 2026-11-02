@@ -30,6 +30,15 @@ Decisions made where `PRD.md` and `plan.md` leave room. Each is easy to change.
 - **Sockets** are served at `/api/socket.io` with no trailing slash, so they pass through the Next.js `/api` rewrite in development. In production, route `/api` (including WebSocket upgrades) to the API.
 - **Basic chat rate limits** (per visitor 10/min, per IP 30/min, per workspace 300/min) are in from Phase 3; Phase 5 adds the monthly spend cap.
 
+## Enquiries, booking and handover
+
+- **Leave a message, Book, Talk to a person** are always shown as buttons in the widget. Booking shows only if Slotwise is connected (in-chat booking) or a booking link is set (opens the link).
+- **Enquiries** need a name, an email or a phone number, the request, and a ticked consent box. The exact consent wording is stored with each enquiry. The email goes to the business email in Business details, or to the workspace owners if none is set.
+- **Booking** looks one week ahead at a time (UK time), up to two weeks per request. Each attempt carries its own Idempotency-Key, and Slotwise sends its own confirmation email. Free times are cached for 30 seconds and the service list for 5 minutes, to stay well under Slotwise's 60 requests a minute.
+- **"Online" for handover** means someone from the workspace has the Conversations page open (a live dashboard socket on any API instance). If nobody is online, asking for a person opens the leave-a-message form.
+- **Every role can take over a chat.** Only the person who took it over can reply. They, or an owner or admin, can hand it back to the assistant.
+- **A removed team member** keeps live updates in an already-open Conversations tab until it reconnects. Every action still needs a membership check, and their access token expires within 15 minutes.
+
 ## Running locally
 
 - Without `SMTP_URL`, the worker writes each email to `apps/api/tmp/mail/*.eml` (git-ignored) instead of sending it, so you can read your login code. Email contents never go to the logs.
