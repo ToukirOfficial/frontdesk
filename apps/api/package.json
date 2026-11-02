@@ -11,7 +11,8 @@
     "typecheck": "prisma generate && tsc -p tsconfig.json --noEmit",
     "lint": "eslint src test",
     "test": "prisma generate && vitest run",
-    "migrate": "prisma migrate deploy"
+    "migrate": "prisma migrate deploy",
+    "seed:demo": "node --env-file-if-exists=../../.env dist/demo/seed-cli.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.3.0",

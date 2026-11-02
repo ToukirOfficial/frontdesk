@@ -11,6 +11,7 @@ import {
   updateMemberBodySchema,
   updateWorkspaceBodySchema,
   type Workspace,
+  ErrorCode,
   type WorkspaceBody,
   type WorkspaceList,
   workspaceListSchema,
@@ -18,14 +19,19 @@ import {
   workspaceSchema,
 } from '@frontdesk/shared';
 import { AnyMember, Auth, LoggedIn, Member as CurrentMember, Roles, type UserAuth, type WorkspaceAuth } from '../common/auth.js';
+import { AppError } from '../common/errors.js';
 import { Returns } from '../common/schema.js';
+import { APP_CONFIG, type AppConfig } from '../config.js';
 import { WorkspacesService } from './workspaces.service.js';
 
 const OK = { ok: true } as const;
 
 @Controller('workspaces')
 export class WorkspacesController {
-  constructor(@Inject(WorkspacesService) private readonly workspaces: WorkspacesService) {}
+  constructor(
+    @Inject(WorkspacesService) private readonly workspaces: WorkspacesService,
+    @Inject(APP_CONFIG) private readonly config: AppConfig,
+  ) {}
 
   @LoggedIn()
   @Get()
@@ -38,6 +44,7 @@ export class WorkspacesController {
   @Post()
   @Returns(workspaceSchema, 201)
   create(@Auth() auth: UserAuth, @Body({ schema: createWorkspaceBodySchema }) body: WorkspaceBody): Promise<Workspace> {
+    if (this.config.DEMO_MODE) throw new AppError(403, ErrorCode.DEMO_MODE, 'This is a public demo, so new workspaces are switched off.');
     return this.workspaces.create(auth.userId, body.name);
   }
 

@@ -28,6 +28,8 @@ import { UsageService } from './insights/usage.service.js';
 import { APP_CONFIG } from './config.js';
 import { VectorStore } from './knowledge/vector-store.js';
 import { HealthController } from './health/health.controller.js';
+import { DemoController } from './demo/demo.controller.js';
+import { DemoService } from './demo/demo.service.js';
 import { InvitesController } from './workspaces/invites.controller.js';
 import { InvitesService } from './workspaces/invites.service.js';
 import { WorkspacesController } from './workspaces/workspaces.controller.js';
@@ -81,8 +83,8 @@ export class AppModule {
     return {
       module: AppModule,
       imports: [CoreModule.forConfig(config), AuthModule, WorkspacesModule, BusinessModule, KnowledgeModule, ChatModule],
-      controllers: [HealthController],
-      providers: [{ provide: APP_GUARD, useClass: AuthGuard }],
+      controllers: [HealthController, DemoController],
+      providers: [{ provide: APP_GUARD, useClass: AuthGuard }, DemoService],
     };
   }
 }

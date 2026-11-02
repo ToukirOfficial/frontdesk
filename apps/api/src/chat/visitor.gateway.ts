@@ -12,6 +12,7 @@ import { type Ack, type ChatMessage, type VisitorServerEvents, visitorMessageSch
 import type { Namespace, Socket } from 'socket.io';
 import { Public } from '../common/auth.js';
 import { RateLimiter } from '../common/rate-limit.js';
+import { APP_CONFIG, type AppConfig } from '../config.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { RedisService } from '../redis/redis.service.js';
 import { ConversationsService } from '../handover/conversations.service.js';
@@ -23,6 +24,7 @@ import { toChatMessage, WidgetService } from './widget.service.js';
 
 interface VisitorData {
   workspaceId: string;
+  isDemo: boolean;
   conversationId: string;
   visitorId: string;
   ip: string;
@@ -49,6 +51,7 @@ export class VisitorGateway implements OnGatewayInit, OnGatewayConnection {
     @Inject(RealtimeService) private readonly realtime: RealtimeService,
     @Inject(ConversationsService) private readonly conversations: ConversationsService,
     @Inject(UsageService) private readonly usage: UsageService,
+    @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
   afterInit(ns: Namespace): void {
@@ -70,9 +73,10 @@ export class VisitorGateway implements OnGatewayInit, OnGatewayConnection {
       if (!conversation) throw new Error('no conversation');
       socket.data = {
         workspaceId: claims.wid,
+        isDemo: info.isDemo,
         conversationId: claims.cid,
         visitorId: claims.vid,
-        ip: clientIp(socket.handshake.address, socket.handshake.headers['x-forwarded-for']),
+        ip: clientIp(socket.handshake.address, socket.handshake.headers['x-forwarded-for'], this.config.TRUST_PROXY === 'private'),
       };
       await socket.join(conversationRoom(claims.cid));
     } catch {
@@ -190,6 +194,10 @@ export class VisitorGateway implements OnGatewayInit, OnGatewayConnection {
       [`chat:ip:${data.ip}`, 30, 60],
       [`chat:ws:${data.workspaceId}`, 300, 60],
     ];
+    if (data.isDemo) {
+      // The public demo: a strict daily allowance per visitor and per IP.
+      checks.push([`demo:visitor:${data.visitorId}`, 20, 24 * 60 * 60], [`demo:ip:${data.ip}`, 60, 24 * 60 * 60]);
+    }
     for (const [key, limit, window] of checks) {
       const wait = await this.limiter.check(key, limit, window);
       if (wait !== null) return `You’re sending messages too quickly. Please try again in ${wait} seconds.`;

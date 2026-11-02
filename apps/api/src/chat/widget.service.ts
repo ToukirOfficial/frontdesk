@@ -23,6 +23,7 @@ export interface WidgetInfo {
   allowedOrigins: string[];
   booking: 'slotwise' | 'link' | 'none';
   bookingUrl: string | null;
+  isDemo: boolean;
 }
 
 export interface VisitorClaims {
@@ -74,6 +75,7 @@ export class WidgetService {
       allowedOrigins: ws.allowedOrigins,
       booking: ws.assistant?.slotwiseKeyCipher ? 'slotwise' : ws.business?.bookingUrl ? 'link' : 'none',
       bookingUrl: ws.business?.bookingUrl || null,
+      isDemo: ws.isDemo,
     };
     await this.redis.setJson(widgetCacheKey(publicKey), info, 60);
     return info;

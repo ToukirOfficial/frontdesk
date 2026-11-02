@@ -24,6 +24,7 @@ import { sha256 } from '../common/crypto.js';
 import { AppError } from '../common/errors.js';
 import { RateLimiter } from '../common/rate-limit.js';
 import { Returns } from '../common/schema.js';
+import { APP_CONFIG, type AppConfig } from '../config.js';
 import { AuthService } from './auth.service.js';
 import { SessionsService } from './sessions.service.js';
 
@@ -35,12 +36,15 @@ export class AuthController {
     @Inject(AuthService) private readonly auth: AuthService,
     @Inject(SessionsService) private readonly sessions: SessionsService,
     @Inject(RateLimiter) private readonly limiter: RateLimiter,
+    @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
   @Public()
   @Post('register')
   @Returns(challengeSchema, 201)
   async register(@Body({ schema: registerBodySchema }) body: RegisterBody, @Req() req: Request): Promise<Challenge> {
+    // A public demo runs on the owner's AI key: nobody else gets an account there.
+    if (this.config.DEMO_MODE) throw new AppError(403, ErrorCode.DEMO_MODE, 'This is a public demo, so sign-up is switched off.');
     await this.limiter.hit(`register:ip:${req.ip}`, 5, 60 * 60);
     return this.auth.register(body);
   }

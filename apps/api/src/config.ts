@@ -22,6 +22,13 @@ const configSchema = z.object({
   MAIL_FROM: z.string().default('Frontdesk <no-reply@frontdesk.example>'),
   /** Public demo: seeded fictional clinic, strict limits, no real emails, nightly reset. */
   DEMO_MODE: flag,
+  /** The demo clinic's hard monthly AI limit, in tokens. */
+  DEMO_MONTHLY_TOKEN_CAP: z.coerce.number().int().min(0).default(300_000),
+  /**
+   * Which proxies may set X-Forwarded-For. loopback: a proxy on this machine (default). private: also private
+   * networks, e.g. the web container in docker compose.
+   */
+  TRUST_PROXY: z.enum(['loopback', 'private']).default('loopback'),
   /** Uploaded knowledge files live here, outside any public folder. */
   STORAGE_DIR: z.string().min(1).default('./storage'),
   /** local: a small model on this machine (no API key). openai: OpenAI embeddings. fake: tests only. */

@@ -33,7 +33,8 @@ export const createApp = async (config: AppConfig): Promise<INestApplication> =>
     bodyParser: false,
   });
   app.useBodyParser('json', { limit: '100kb' });
-  app.set('trust proxy', 'loopback'); // a reverse proxy on the same host sets X-Forwarded-For
+  // Who may set X-Forwarded-For: a proxy on this machine, or (docker compose) the web container on a private network.
+  app.set('trust proxy', config.TRUST_PROXY === 'private' ? ['loopback', 'uniquelocal'] : 'loopback');
   app.disable('x-powered-by');
   app.use(requestIdMiddleware);
 

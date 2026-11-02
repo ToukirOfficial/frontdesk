@@ -8,6 +8,7 @@ import { VectorStore } from './knowledge/vector-store.js';
 import { MailProcessor } from './mail/mail.processor.js';
 import { MaintenanceProcessor } from './insights/maintenance.processor.js';
 import { RetentionService } from './insights/retention.service.js';
+import { DemoService } from './demo/demo.service.js';
 
 /** The background worker (src/worker.ts): everything slow runs here, never inside a request. */
 @Module({})
@@ -21,6 +22,7 @@ export class WorkerModule {
         KnowledgeProcessor,
         MaintenanceProcessor,
         RetentionService,
+        DemoService,
         VectorStore,
         { provide: EMBEDDER, useFactory: createEmbedder, inject: [APP_CONFIG] },
       ],
