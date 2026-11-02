@@ -88,4 +88,4 @@ Each phase ends with `pnpm typecheck && pnpm lint && pnpm test && pnpm build`, t
 
 ## Progress
 
-- [x] Phase 1 (2026-11-02: 34 API tests, typecheck/lint/build clean, audit has no high/critical) · [x] Phase 2 (2026-11-02: 87 API tests; local embedding model not run here, Hugging Face is blocked in this environment) · [x] Phase 3 (2026-11-02: 99 API tests; widget checked in a browser through the proxy; real model replies not run here, no API key) · [x] Phase 4 (2026-11-02: 117 API tests; handover checked in two browsers) · [x] Phase 5 (2026-11-02: 124 API tests) · [ ] Phase 6
+- [x] Phase 1 (2026-11-02: 34 API tests, typecheck/lint/build clean, audit has no high/critical) · [x] Phase 2 (2026-11-02: 87 API tests; local embedding model not run here, Hugging Face is blocked in this environment) · [x] Phase 3 (2026-11-02: 99 API tests; widget checked in a browser through the proxy; real model replies not run here, no API key) · [x] Phase 4 (2026-11-02: 117 API tests; handover checked in two browsers) · [x] Phase 5 (2026-11-02: 124 API tests) · [x] Phase 6 (2026-11-02: 130 API tests; `docker compose up` checked from clean; eval set dry-run only, no API key here)

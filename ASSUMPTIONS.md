@@ -46,6 +46,12 @@ Decisions made where `PRD.md` and `plan.md` leave room. Each is easy to change.
 - **Search** matches message text (case-insensitive) within the workspace only.
 - **Unanswered questions:** "Add answer" turns the question and the answer into an FAQ; "Dismiss" marks it done without adding knowledge.
 
+## Demo, evaluation and self-hosting
+
+- **Demo mode** seeds one fictional clinic (every name, address, number and price is made up, in `apps/api/src/demo/clinic.ts`). It switches off sign-up and new workspaces, because the demo runs on the owner's AI key. It sends no emails, allows each visitor 20 messages a day (60 per IP), sets a hard monthly limit (`DEMO_MONTHLY_TOKEN_CAP`, default 300,000 tokens) and resets visitors' data every night at 03:30 UK time. The demo has no Book button (there's nowhere real to book).
+- **The evaluation set** uses the demo clinic's knowledge plus a small fictional law firm, retrieves the same way as the app (same chunking, top 5), and grades by phrases that must or must not appear, plus whether `report_unanswered` was called. It can't judge tone; read the saved answers in `evals/results/latest.json` too.
+- **Docker:** the web container proxies `/api` (including WebSockets) to the API, so only port 8025 is published. Migrations run when the API container starts. The worker uses the same image. The local embedding model downloads once into the `storage` volume.
+
 ## Running locally
 
 - Without `SMTP_URL`, the worker writes each email to `apps/api/tmp/mail/*.eml` (git-ignored) instead of sending it, so you can read your login code. Email contents never go to the logs.
