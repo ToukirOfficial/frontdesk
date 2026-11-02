@@ -1,7 +1,7 @@
 # Frontdesk — build plan
 
 Source of truth: `PRD.md`. Stack and rules: the project rules. Approved 2026-11-02 with the decisions at the end.
-Monorepo: `apps/web` (Next.js 16.3, port 8025), `apps/api` (NestJS 12 + Prisma 7, port 8125, plus a worker entry point), `packages/shared` (Zod), `packages/widget` (plain Web Component), `evals/`.
+Monorepo: `apps/web` (Next.js 16.4 — moved from 16.3 because every 16.3.x release has critical advisories, approved 2026-11-02; port 8025), `apps/api` (NestJS 12 + Prisma 7, port 8125, plus a worker entry point), `packages/shared` (Zod), `packages/widget` (plain Web Component), `evals/`.
 
 ## Data model (Prisma, PostgreSQL 18 + pgvector; UUIDv7 ids, `createdAt`/`updatedAt` everywhere)
 
@@ -25,7 +25,7 @@ Monorepo: `apps/web` (Next.js 16.3, port 8025), `apps/api` (NestJS 12 + Prisma 7
 
 ## NestJS modules
 
-- **auth** — register, login (password → 6-digit email code on **every** login → tokens), refresh, logout, cookies, rate limits. Global `AuthGuard` + `RolesGuard`, `@Public()`, `@Roles()`.
+- **auth** — register, login (password → 6-digit email code on **every** login → tokens), refresh, logout, password reset (rate-limited, per the project rules rule 4), cookies, rate limits. Global `AuthGuard` + `RolesGuard`, `@Public()`, `@Roles()`.
 - **workspaces** — workspace CRUD, members, invites, roles.
 - **business** — business profile and assistant settings (rules, presets, widget look, Slotwise connection).
 - **knowledge** — sources CRUD, file upload (PDF/DOCX, magic-byte check, random name outside public dirs), URL import request; jobs to queue.
@@ -77,8 +77,8 @@ Base URL + `/api/v1`, header `Authorization: Bearer sw_live_<prefix>_<secret>`. 
 
 ## Build phases
 
-1. **Foundation, auth, workspaces, roles** — monorepo, tooling, CI, docker-compose, Prisma schema + first migration (pgvector enabled), auth (password + email code, rotating refresh cookies), guards, workspaces, members, invites, dashboard login and team pages. Tests: login/code/refresh/reuse, role permissions, workspace isolation, auth rate limits.
-2. **Business details and knowledge** — settings, Slotwise key encryption, knowledge CRUD, uploads, SSRF-safe URL import, chunking + embedding jobs, status UI. Tests: knowledge isolation incl. multi-workspace vector search, upload permissions, SSRF guard.
+1. **Foundation, auth, workspaces, roles** — monorepo, tooling, CI, docker-compose, Prisma schema + first migration, auth (password + email code, rotating refresh cookies, password reset), guards, workspaces, members, invites, dashboard login and team pages. Tests: login/code/refresh/reuse, role permissions, workspace isolation, auth rate limits.
+2. **Business details and knowledge** — settings, Slotwise key encryption, knowledge CRUD, uploads, SSRF-safe URL import, pgvector extension + chunk table, chunking + embedding jobs, status UI. Tests: knowledge isolation incl. multi-workspace vector search, upload permissions, SSRF guard.
 3. **Assistant and widget** — provider interface, versioned prompts with untrusted-data wrapping, RAG with sources, `report_unanswered` tool, rules + presets, streaming over WebSockets, the widget. Tests: widget key/origin checks, retrieval scoping through the chat path (fake provider).
 4. **Enquiries, booking, handover** — enquiry capture + consent + email, booking link / Slotwise, presence, atomic takeover / hand back, fallback to enquiry. Tests: handover rules, concurrent takeover.
 5. **Limits, insights, retention** — IP/visitor/workspace limits, monthly token cap, insights pages, retention job. Tests: rate limits, spend cap, retention.
@@ -88,4 +88,4 @@ Each phase ends with `pnpm typecheck && pnpm lint && pnpm test && pnpm build`, t
 
 ## Progress
 
-- [ ] Phase 1 · [ ] Phase 2 · [ ] Phase 3 · [ ] Phase 4 · [ ] Phase 5 · [ ] Phase 6
+- [x] Phase 1 (2026-11-02: 34 API tests, typecheck/lint/build clean, audit has no high/critical) · [ ] Phase 2 · [ ] Phase 3 · [ ] Phase 4 · [ ] Phase 5 · [ ] Phase 6
