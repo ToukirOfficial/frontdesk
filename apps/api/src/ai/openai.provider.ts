@@ -1,28 +1,65 @@
 import OpenAI from 'openai';
-import type { AppConfig } from '../config.js';
-import { type ChatProvider, type ChatRequest, type ChatResult, ChatUnavailableError } from './chat-provider.js';
+import type { ChatProvider, ChatRequest, ChatResult, ProviderSpec } from './chat-provider.js';
 
-/** OpenAI chat completions, streamed. */
-export class OpenAIProvider implements ChatProvider {
-  private readonly client: OpenAI | null;
+/** Google's OpenAI-compatible endpoint, so Gemini needs no extra library. */
+export const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/';
 
-  constructor(private readonly config: AppConfig) {
-    this.client = config.OPENAI_API_KEY ? new OpenAI({ apiKey: config.OPENAI_API_KEY, maxRetries: 1 }) : null;
+const estimateTokens = (text: string) => Math.ceil(text.length / 4);
+
+/**
+ * OpenAI, Gemini and any OpenAI-compatible endpoint (Ollama, vLLM, LM Studio, OpenRouter…), streamed through the
+ * chat completions API.
+ */
+export class OpenAIFamilyProvider implements ChatProvider {
+  private readonly client: OpenAI;
+
+  constructor(private readonly spec: ProviderSpec) {
+    const baseURL = spec.provider === 'gemini' ? GEMINI_BASE_URL : spec.provider === 'openai-compatible' ? spec.baseUrl : undefined;
+    this.client = new OpenAI({
+      // Ollama and some self-hosted servers need no key, but the client insists on one.
+      apiKey: spec.apiKey || 'not-needed',
+      baseURL,
+      maxRetries: 1,
+      timeout: 90_000,
+      ...(spec.fetch ? { fetch: spec.fetch } : {}),
+    });
+  }
+
+  /** OpenAI's newer models want max_completion_tokens; Gemini and most compatible servers want max_tokens. */
+  private limit(n: number) {
+    return this.spec.provider === 'openai' ? { max_completion_tokens: n } : { max_tokens: n };
   }
 
   async stream(req: ChatRequest, onText: (delta: string) => void): Promise<ChatResult> {
-    if (!this.client) throw new ChatUnavailableError('OPENAI_API_KEY is not set');
+    try {
+      return await this.run(req, onText, true);
+    } catch (err) {
+      // Many local models can't use tools. Answer without them rather than not at all (no citations then).
+      const status = (err as { status?: unknown }).status;
+      if (this.spec.provider === 'openai-compatible' && status === 400 && /tool/i.test(String((err as Error).message))) {
+        return this.run(req, onText, false);
+      }
+      throw err;
+    }
+  }
+
+  private async run(req: ChatRequest, onText: (delta: string) => void, withTools: boolean): Promise<ChatResult> {
+    const system = `${req.system}\n\n${req.reference}`;
     const stream = await this.client.chat.completions.create(
       {
-        model: this.config.OPENAI_CHAT_MODEL,
-        max_completion_tokens: req.maxTokens,
+        model: this.spec.model,
+        ...this.limit(req.maxTokens),
         stream: true,
         stream_options: { include_usage: true },
-        messages: [{ role: 'system', content: `${req.system}\n\n${req.reference}` }, ...req.messages],
-        tools: req.tools.map((t) => ({
-          type: 'function' as const,
-          function: { name: t.name, description: t.description, parameters: t.inputSchema },
-        })),
+        messages: [{ role: 'system', content: system }, ...req.messages],
+        ...(withTools && req.tools.length
+          ? {
+              tools: req.tools.map((t) => ({
+                type: 'function' as const,
+                function: { name: t.name, description: t.description, parameters: t.inputSchema },
+              })),
+            }
+          : {}),
       },
       { signal: req.signal },
     );
@@ -52,6 +89,11 @@ export class OpenAIProvider implements ChatProvider {
         outputTokens = chunk.usage.completion_tokens;
       }
     }
+    // Some compatible servers don't report usage. Estimate, so the monthly cap still counts something.
+    if (!inputTokens && !outputTokens) {
+      inputTokens = estimateTokens(system + req.messages.map((m) => m.content).join(''));
+      outputTokens = estimateTokens(text);
+    }
     const toolCalls = [...calls.values()].flatMap((c) => {
       try {
         return [{ name: c.name, input: JSON.parse(c.args || '{}') as unknown }];
@@ -60,5 +102,13 @@ export class OpenAIProvider implements ChatProvider {
       }
     });
     return { text, toolCalls, inputTokens, outputTokens, refused };
+  }
+
+  async ping(): Promise<void> {
+    await this.client.chat.completions.create({
+      model: this.spec.model,
+      ...this.limit(16),
+      messages: [{ role: 'user', content: 'Reply with OK.' }],
+    });
   }
 }

@@ -33,6 +33,8 @@ export const ErrorCode = {
   NOT_ASSIGNED: 'NOT_ASSIGNED',
   SLOT_TAKEN: 'SLOT_TAKEN',
   BOOKING_UNAVAILABLE: 'BOOKING_UNAVAILABLE',
+  AI_KEY_REJECTED: 'AI_KEY_REJECTED',
+  AI_NOT_CONFIGURED: 'AI_NOT_CONFIGURED',
 } as const;
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
 

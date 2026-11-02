@@ -37,16 +37,20 @@ const configSchema = z.object({
   OPENAI_EMBEDDING_MODEL: z.string().min(1).default('text-embedding-3-small'),
   /** Where the local model is downloaded to on first use. */
   MODEL_CACHE_DIR: z.string().min(1).default('./storage/models'),
+  /** Only for EMBEDDING_PROVIDER=openai. Chat keys are set below (AI_API_KEY) or per workspace in the dashboard. */
   OPENAI_API_KEY: z.string().optional().default(''),
-  /** Chat replies: anthropic (default) or openai. fake: tests only. */
-  AI_PROVIDER: z.enum(['anthropic', 'openai', 'fake']).default('anthropic'),
-  ANTHROPIC_API_KEY: z.string().optional().default(''),
-  ANTHROPIC_MODEL: z.string().min(1).default('claude-opus-5-5'),
-  /** How hard the model thinks. A receptionist's short answers do well at low. */
-  ANTHROPIC_EFFORT: z.enum(['low', 'medium', 'high']).default('low'),
-  /** Server-side fallback when a request is declined (supported on Opus 5.5, Fable 5.1, Sonnet 5.5). off for Haiku. */
-  ANTHROPIC_FALLBACKS: z.enum(['default', 'off']).default('default'),
-  OPENAI_CHAT_MODEL: z.string().min(1).default('gpt-4.1-mini'),
+  /**
+   * Optional instance-wide chat provider (bring your own key). Empty: none, and each workspace adds its own key in
+   * Settings → AI provider. fake: tests only.
+   */
+  AI_PROVIDER: z.enum(['', 'anthropic', 'openai', 'gemini', 'openai-compatible', 'fake']).default(''),
+  /** The model id, exactly as the provider names it. There is deliberately no default. */
+  AI_MODEL: z.string().trim().optional().default(''),
+  AI_API_KEY: z.string().trim().optional().default(''),
+  /** openai-compatible only, e.g. http://localhost:11434/v1 for Ollama on this machine. */
+  AI_BASE_URL: z.string().trim().optional().default(''),
+  /** Anthropic only, instance key only: how hard the model thinks. Empty = the model's default. */
+  ANTHROPIC_EFFORT: z.enum(['', 'low', 'medium', 'high']).default(''),
   /**
    * Lets server-side fetches (website import, Slotwise) reach private and loopback addresses. For local development
    * and tests only (e.g. a Slotwise on localhost); refused in production.
@@ -55,6 +59,35 @@ const configSchema = z.object({
 });
 
 export type AppConfig = z.infer<typeof configSchema>;
+
+/** The AI settings only, for scripts that need a provider but no database (eval runner, demo recorder). */
+export const aiConfigSchema = configSchema.pick({
+  NODE_ENV: true,
+  AI_PROVIDER: true,
+  AI_MODEL: true,
+  AI_API_KEY: true,
+  AI_BASE_URL: true,
+  ANTHROPIC_EFFORT: true,
+  EMBEDDING_PROVIDER: true,
+  LOCAL_EMBEDDING_MODEL: true,
+  OPENAI_EMBEDDING_MODEL: true,
+  OPENAI_API_KEY: true,
+  MODEL_CACHE_DIR: true,
+});
+export type AiConfig = z.infer<typeof aiConfigSchema>;
+
+/**
+ * What's missing from the instance AI settings, if a provider is chosen. The app still starts without them (it then
+ * runs with no instance provider); names only, never values.
+ */
+export const missingAiSettings = (c: AiConfig): string[] => {
+  if (!c.AI_PROVIDER || c.AI_PROVIDER === 'fake') return [];
+  const missing: string[] = [];
+  if (!c.AI_MODEL) missing.push('AI_MODEL');
+  if (!c.AI_API_KEY && c.AI_PROVIDER !== 'openai-compatible') missing.push('AI_API_KEY');
+  if (!c.AI_BASE_URL && c.AI_PROVIDER === 'openai-compatible') missing.push('AI_BASE_URL');
+  return missing;
+};
 
 export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
   const parsed = configSchema.safeParse(env);
@@ -83,3 +116,10 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
 };
 
 export const APP_CONFIG = Symbol('APP_CONFIG');
+
+export const loadAiConfig = (env: NodeJS.ProcessEnv = process.env): AiConfig => {
+  const parsed = aiConfigSchema.safeParse(env);
+  if (!parsed.success) throw new Error(`Invalid environment: ${parsed.error.issues.map((i) => i.path.join('.')).join(', ')}`);
+  if (parsed.data.AI_PROVIDER === 'fake' && parsed.data.NODE_ENV !== 'test') throw new Error('AI_PROVIDER=fake is for tests only');
+  return parsed.data;
+};

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { AppConfig } from '../config.js';
+import type { AiConfig } from '../config.js';
 
 /** Every embedding provider returns unit-length vectors of this size (the pgvector column is vector(384)). */
 export const EMBEDDING_DIMS = 384;
@@ -22,7 +22,7 @@ const normalise = (v: number[]): number[] => {
 class LocalEmbedder implements Embedder {
   private extractor?: Promise<(texts: string[], opts: object) => Promise<{ tolist(): number[][] }>>;
 
-  constructor(private readonly config: AppConfig) {}
+  constructor(private readonly config: AiConfig) {}
 
   private load() {
     this.extractor ??= (async () => {
@@ -46,7 +46,7 @@ class LocalEmbedder implements Embedder {
 class OpenAIEmbedder implements Embedder {
   private client?: Promise<import('openai').default>;
 
-  constructor(private readonly config: AppConfig) {}
+  constructor(private readonly config: AiConfig) {}
 
   async embed(texts: string[]): Promise<number[][]> {
     this.client ??= import('openai').then((m) => new m.default({ apiKey: this.config.OPENAI_API_KEY }));
@@ -81,7 +81,7 @@ export class FakeEmbedder implements Embedder {
   }
 }
 
-export const createEmbedder = (config: AppConfig): Embedder => {
+export const createEmbedder = (config: AiConfig): Embedder => {
   switch (config.EMBEDDING_PROVIDER) {
     case 'local':
       return new LocalEmbedder(config);

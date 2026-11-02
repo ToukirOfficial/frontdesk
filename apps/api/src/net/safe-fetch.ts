@@ -2,6 +2,7 @@ import { lookup as dnsLookup } from 'node:dns/promises';
 import http from 'node:http';
 import https from 'node:https';
 import { BlockList, isIP, type LookupFunction } from 'node:net';
+import { Readable } from 'node:stream';
 
 /**
  * Server-side fetching of URLs that a workspace admin typed in (website import, Slotwise). Guards against SSRF:
@@ -131,14 +132,10 @@ export const resolvePublic = async (host: string, allowPrivate: boolean): Promis
   return { address: first.address, family: first.family === 6 ? 6 : 4 };
 };
 
-export const safeFetch = async (raw: string, opts: SafeFetchOptions = {}): Promise<SafeResponse> => {
-  const url = checkUrlShape(raw, opts.allowHttp ?? false);
-  const pinned = await resolvePublic(url.hostname, opts.allowPrivate ?? false);
-  const timeoutMs = opts.timeoutMs ?? 10_000;
-  const maxBytes = opts.maxBytes ?? 2 * 1024 * 1024;
-
-  // Every connection uses the address vetted above, whatever DNS says now.
-  const lookup: LookupFunction = (_host, options, cb) => {
+/** Every connection uses the vetted address, whatever DNS says now. */
+const pinnedLookup =
+  (pinned: { address: string; family: 4 | 6 }): LookupFunction =>
+  (_host, options, cb) => {
     if ((options as { all?: boolean }).all) {
       (cb as unknown as (e: null, a: { address: string; family: number }[]) => void)(null, [
         { address: pinned.address, family: pinned.family },
@@ -147,6 +144,13 @@ export const safeFetch = async (raw: string, opts: SafeFetchOptions = {}): Promi
       cb(null, pinned.address, pinned.family);
     }
   };
+
+export const safeFetch = async (raw: string, opts: SafeFetchOptions = {}): Promise<SafeResponse> => {
+  const url = checkUrlShape(raw, opts.allowHttp ?? false);
+  const pinned = await resolvePublic(url.hostname, opts.allowPrivate ?? false);
+  const timeoutMs = opts.timeoutMs ?? 10_000;
+  const maxBytes = opts.maxBytes ?? 2 * 1024 * 1024;
+  const lookup = pinnedLookup(pinned);
 
   const client = url.protocol === 'https:' ? https : http;
   return new Promise<SafeResponse>((resolve, reject) => {
@@ -185,3 +189,46 @@ export const safeFetch = async (raw: string, opts: SafeFetchOptions = {}): Promi
     req.end();
   });
 };
+
+const NULL_BODY = new Set([101, 204, 205, 304]);
+
+/**
+ * A `fetch` with the same SSRF guard, for an AI endpoint an admin typed in (OpenAI-compatible base URL). Unlike
+ * safeFetch it streams the response (chat replies arrive word by word), so the limit is a total time, not a size.
+ * Redirects are not followed.
+ */
+export const guardedFetch =
+  (opts: { allowHttp: boolean; allowPrivate: boolean; timeoutMs?: number }): typeof fetch =>
+  async (input, init = {}) => {
+    const raw = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    const url = checkUrlShape(raw, opts.allowHttp);
+    const pinned = await resolvePublic(url.hostname, opts.allowPrivate);
+    const headers: Record<string, string> = {};
+    new Headers(init.headers).forEach((v, k) => (headers[k] = v));
+    headers['accept-encoding'] = 'identity'; // we pass the raw stream on, so ask for it uncompressed
+    const body =
+      init.body == null ? undefined : typeof init.body === 'string' ? init.body : Buffer.from(await new Response(init.body).arrayBuffer());
+    const client = url.protocol === 'https:' ? https : http;
+
+    return new Promise<Response>((resolve, reject) => {
+      const req = client.request(url, { method: init.method ?? 'GET', headers, lookup: pinnedLookup(pinned), agent: false }, (res) => {
+        const h = new Headers();
+        for (const [k, v] of Object.entries(res.headers)) {
+          if (Array.isArray(v)) v.forEach((x) => h.append(k, x));
+          else if (v !== undefined) h.set(k, String(v));
+        }
+        const status = res.statusCode ?? 502;
+        res.on('close', () => clearTimeout(timer));
+        resolve(new Response(NULL_BODY.has(status) ? null : (Readable.toWeb(res) as ReadableStream), { status, headers: h }));
+      });
+      const fail = (err: Error) => req.destroy(err);
+      const timer = setTimeout(() => fail(new UrlRejectedError('The AI endpoint took too long to answer.')), opts.timeoutMs ?? 120_000);
+      init.signal?.addEventListener('abort', () => fail(Object.assign(new Error('Aborted'), { name: 'AbortError' })), { once: true });
+      req.on('error', (err) => {
+        clearTimeout(timer);
+        reject(err instanceof UrlRejectedError || err.name === 'AbortError' ? err : new UrlRejectedError('The AI endpoint couldn’t be reached.'));
+      });
+      if (body !== undefined) req.write(body);
+      req.end();
+    });
+  };

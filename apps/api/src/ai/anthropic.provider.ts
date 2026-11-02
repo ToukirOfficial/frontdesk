@@ -1,23 +1,20 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { AppConfig } from '../config.js';
-import { type ChatProvider, type ChatRequest, type ChatResult, ChatUnavailableError } from './chat-provider.js';
+import type { ChatProvider, ChatRequest, ChatResult, ProviderSpec } from './chat-provider.js';
 
-/** Claude through the official SDK. Model, effort and fallbacks come from env. */
+/** Claude through the official SDK, with whichever key and model the spec carries. */
 export class AnthropicProvider implements ChatProvider {
-  private readonly client: Anthropic | null;
+  private readonly client: Anthropic;
 
-  constructor(private readonly config: AppConfig) {
-    this.client = config.ANTHROPIC_API_KEY ? new Anthropic({ apiKey: config.ANTHROPIC_API_KEY, maxRetries: 1 }) : null;
+  constructor(private readonly spec: ProviderSpec) {
+    this.client = new Anthropic({ apiKey: spec.apiKey, maxRetries: 1, timeout: 90_000 });
   }
 
   async stream(req: ChatRequest, onText: (delta: string) => void): Promise<ChatResult> {
-    if (!this.client) throw new ChatUnavailableError('ANTHROPIC_API_KEY is not set');
-    const fallbacks = this.config.ANTHROPIC_FALLBACKS === 'default';
-    const stream = this.client.beta.messages.stream(
+    const stream = this.client.messages.stream(
       {
-        model: this.config.ANTHROPIC_MODEL,
+        model: this.spec.model,
         max_tokens: req.maxTokens,
-        output_config: { effort: this.config.ANTHROPIC_EFFORT },
+        ...(this.spec.anthropicEffort ? { output_config: { effort: this.spec.anthropicEffort } } : {}),
         // The instructions never change between visitors of a workspace, so cache them.
         system: [
           { type: 'text', text: req.system, cache_control: { type: 'ephemeral' } },
@@ -27,11 +24,9 @@ export class AnthropicProvider implements ChatProvider {
         tools: req.tools.map((t) => ({
           name: t.name,
           description: t.description,
-          input_schema: t.inputSchema as Anthropic.Beta.BetaTool.InputSchema,
-          strict: true,
+          input_schema: t.inputSchema as Anthropic.Tool.InputSchema,
         })),
         tool_choice: { type: 'auto' },
-        ...(fallbacks ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {}),
       },
       { signal: req.signal },
     );
@@ -49,5 +44,9 @@ export class AnthropicProvider implements ChatProvider {
       outputTokens: message.usage.output_tokens,
       refused: message.stop_reason === 'refusal',
     };
+  }
+
+  async ping(): Promise<void> {
+    await this.client.messages.create({ model: this.spec.model, max_tokens: 8, messages: [{ role: 'user', content: 'Reply with OK.' }] });
   }
 }
