@@ -19,7 +19,8 @@ export default async function DemoPage() {
   return (
     <div className="min-h-dvh bg-[#fbfaf7] font-serif text-[#22313a]">
       <p className="bg-[#22313a] px-4 py-2 text-center font-sans text-sm text-white">
-        This is a demo of Frontdesk on a made-up clinic website. Try the chat in the corner. Conversations reset every night.
+        This is a demo of Frontdesk on a made-up clinic website. The chat in the corner shows sample answers to suggested questions;
+        add your own AI key in the chat for live answers. Conversations reset every night.
       </p>
       <header className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-4 px-4 py-6">
         <p className="text-2xl font-semibold">Riverside Physio</p>

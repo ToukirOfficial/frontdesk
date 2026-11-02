@@ -1,4 +1,4 @@
-import type { BookingService, ChatMessage, Slots, VisitorServerEvents, WidgetConfig, WidgetSession } from '@frontdesk/shared';
+import type { BookingService, ChatMessage, DemoKeyInfo, Slots, VisitorServerEvents, WidgetConfig, WidgetSession } from '@frontdesk/shared';
 import { io, type Socket } from 'socket.io-client';
 import { MORE_STYLES, STYLES } from './styles.js';
 
@@ -46,6 +46,14 @@ const uuid = (): string => {
 };
 type VisitorSocket = Socket<VisitorServerEvents, VisitorClientEvents>;
 
+/** Providers a demo visitor can use with their own key (the API checks this too). */
+const DEMO_PROVIDERS = [
+  ['anthropic', 'Anthropic (Claude)'],
+  ['openai', 'OpenAI'],
+  ['gemini', 'Google Gemini'],
+] as const;
+const providerLabel = (p: string) => DEMO_PROVIDERS.find(([id]) => id === p)?.[1] ?? p;
+
 const store = {
   get(k: string): string | null {
     try {
@@ -90,6 +98,12 @@ class FrontdeskChat extends HTMLElement {
   private sheet!: HTMLElement;
   private token = '';
   private lastVisitorText = '';
+  private banner!: HTMLElement;
+  private suggest!: HTMLElement;
+  /** ai or human (a member of staff has the chat). */
+  private convMode: WidgetSession['mode'] = 'ai';
+  /** Demo only: the visitor's own key for this chat (last 4 characters only). */
+  private demoKey: DemoKeyInfo | null = null;
 
   /** `key` in plain HTML; `data-key` where `key` is reserved (React). */
   private get key(): string {
@@ -189,13 +203,19 @@ class FrontdeskChat extends HTMLElement {
     this.sheet = el('section', { class: 'sheet', 'aria-live': 'polite' });
     this.sheet.hidden = true;
 
-    const note = el('p', { class: 'note' }, 'Please don’t share sensitive personal details here.');
-    this.panel.append(header, this.log, this.sheet, this.errorLine, this.actions, form, note);
-    // Leave-a-message mode (e.g. the assistant is paused): no chat box, just the form.
-    if (c.mode === 'message') {
-      form.hidden = true;
-      this.actions.hidden = true;
+    this.banner = el('p', { class: 'banner', role: 'status' });
+    this.suggest = el('div', { class: 'suggest', role: 'group', 'aria-label': 'Suggested questions' });
+    for (const q of c.suggestions) {
+      const b = el('button', { class: 'chip', type: 'button' }, q);
+      b.addEventListener('click', () => void this.sendText(q));
+      this.suggest.append(b);
     }
+
+    const note = el('p', { class: 'note' }, 'Please don’t share sensitive personal details here.');
+    this.panel.append(header, this.banner, this.log, this.sheet, this.errorLine, this.suggest, this.actions, form, note);
+    // Leave-a-message mode (e.g. the assistant is paused): no chat box, just the form.
+    if (c.mode === 'message') this.actions.hidden = true;
+    this.updateComposer();
     this.panel.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') this.toggle(false);
     });
@@ -208,7 +228,7 @@ class FrontdeskChat extends HTMLElement {
     this.launcher.setAttribute('aria-expanded', String(open));
     if (open) {
       if (!this.started) void this.start();
-      this.input.focus();
+      if (!this.chatForm.hidden) this.input.focus();
     } else {
       this.launcher.hidden = false;
       this.launcher.focus();
@@ -230,6 +250,9 @@ class FrontdeskChat extends HTMLElement {
       store.set(this.storageKey, s.token);
       this.token = s.token;
       s.messages.forEach((m) => this.add(m));
+      this.convMode = s.mode;
+      this.demoKey = s.demoKey;
+      this.updateComposer();
       this.connect(s.token);
       if (this.config!.mode === 'message') this.showEnquiry();
     } catch {
@@ -267,30 +290,110 @@ class FrontdeskChat extends HTMLElement {
     socket.on('mode', ({ mode, staffName }) => {
       this.subtitle.textContent =
         mode === 'human' && staffName ? `You’re chatting with ${staffName}` : 'AI assistant · answers from our own information';
+      this.convMode = mode;
+      this.updateComposer();
     });
     socket.on('handover:unavailable', () => this.showEnquiry());
     this.socket = socket;
   }
 
+  /** Whether visitors can type: someone (the assistant or a person) can actually answer free text. */
+  private get canType(): boolean {
+    const ai = this.config!.ai;
+    return this.convMode === 'human' || ai === 'ready' || (ai === 'replay' && this.demoKey !== null);
+  }
+
+  /** Chat box, suggestions and the banner follow the AI state: ready, none, demo replay or demo with own key. */
+  private updateComposer(): void {
+    const c = this.config!;
+    const chat = this.sheet.hidden;
+    this.chatForm.hidden = !chat || c.mode === 'message' || !this.canType;
+    this.suggest.hidden = !chat || c.mode === 'message' || c.ai !== 'replay' || this.demoKey !== null || this.convMode === 'human';
+    this.banner.replaceChildren();
+    this.banner.hidden = true;
+    if (this.convMode === 'human' || c.mode === 'message') return;
+    if (c.ai === 'none') {
+      this.banner.append(el('strong', {}, 'No AI provider configured.'), ' The assistant can’t answer yet. You can leave a message or ask for a person.');
+      this.banner.hidden = false;
+    } else if (c.ai === 'replay') {
+      const btn = el('button', { class: 'linkish', type: 'button' }, this.demoKey ? 'Remove key' : 'Use your own key');
+      if (this.demoKey) {
+        this.banner.append(el('strong', {}, 'Live answers'), ` with your ${providerLabel(this.demoKey.provider)} key ending ${this.demoKey.keyLast4}.`, btn);
+        btn.addEventListener('click', () => void this.removeOwnKey());
+      } else {
+        this.banner.append(el('strong', {}, 'Demo: sample answers.'), ' Pick a question below, or ask anything with your own key.', btn);
+        btn.addEventListener('click', () => this.showOwnKey());
+      }
+      this.banner.hidden = false;
+    }
+  }
+
   private async send(): Promise<void> {
     const text = this.input.value.trim();
-    if (!text || this.busy || !this.socket) return;
+    if (!text) return;
+    this.input.value = '';
+    if (!(await this.sendText(text))) this.input.value = text;
+  }
+
+  private async sendText(text: string): Promise<boolean> {
+    if (this.busy || !this.socket) return false;
     this.busy = true;
     this.sendBtn.disabled = true;
     this.errorLine.hidden = true;
-    this.input.value = '';
     this.lastVisitorText = text;
     const ack = await this.socket
       .timeout(90_000)
       .emitWithAck('message', { text })
       .catch((): AckResult => ({ ok: false, error: 'No answer. Check your connection and try again.' }));
-    if (!ack.ok) {
-      this.input.value = text;
-      this.showError(ack.error ?? 'Your message wasn’t sent.');
-    }
+    if (!ack.ok) this.showError(ack.error ?? 'Your message wasn’t sent.');
     this.busy = false;
     this.sendBtn.disabled = false;
-    this.input.focus();
+    if (!this.chatForm.hidden) this.input.focus();
+    return ack.ok;
+  }
+
+  /** Demo only: live answers with the visitor's own key, kept for this chat and deleted after 24 hours. */
+  private showOwnKey(): void {
+    const provider = el('select');
+    for (const [id, label] of DEMO_PROVIDERS) provider.append(el('option', { value: id }, label));
+    const model = el('input', { type: 'text', maxlength: '120', required: '', autocomplete: 'off', spellcheck: 'false', placeholder: 'The model id from your provider’s docs' }) as HTMLInputElement;
+    const key = el('input', { type: 'password', maxlength: '500', required: '', autocomplete: 'off' }) as HTMLInputElement;
+    const error = el('p', { class: 'form-error', role: 'alert' });
+    const submit = el('button', { class: 'primary', type: 'submit' }, 'Use my key') as HTMLButtonElement;
+    const form = el('form');
+    form.style.cssText = 'display:flex;flex-direction:column;gap:10px';
+    form.append(
+      el('p', { class: 'muted' }, 'Get live answers about this demo clinic, paid by your own key. It’s tested with one tiny request, stored encrypted, used only for this chat, never shown again and deleted after 24 hours. Use a key with a low spending limit.'),
+      this.field('Provider', provider),
+      this.field('Model', model),
+      this.field('API key', key),
+      error,
+      submit,
+    );
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      submit.disabled = true;
+      submit.textContent = 'Testing…';
+      error.textContent = '';
+      const res = await this.post<DemoKeyInfo>('demo-key', { token: this.token, provider: provider.value, model: model.value, apiKey: key.value });
+      submit.disabled = false;
+      submit.textContent = 'Use my key';
+      if (!res.ok) {
+        error.textContent = res.error;
+        return;
+      }
+      key.value = '';
+      this.demoKey = res.data;
+      this.openSheet(null);
+    });
+    this.openSheet('Use your own key', form);
+  }
+
+  private async removeOwnKey(): Promise<void> {
+    const res = await this.post('demo-key', { token: this.token }, 'DELETE');
+    if (!res.ok) return this.showError(res.error);
+    this.demoKey = null;
+    this.updateComposer();
   }
 
   private async askForPerson(): Promise<void> {
@@ -307,11 +410,11 @@ class FrontdeskChat extends HTMLElement {
     const chat = title === null;
     this.sheet.hidden = chat;
     this.log.hidden = !chat;
-    this.chatForm.hidden = !chat || this.config!.mode === 'message';
     this.actions.hidden = !chat || this.config!.mode === 'message';
     this.errorLine.hidden = true;
+    this.updateComposer();
     if (chat) {
-      this.input.focus();
+      if (!this.chatForm.hidden) this.input.focus();
       return;
     }
     this.sheet.replaceChildren();
@@ -325,7 +428,7 @@ class FrontdeskChat extends HTMLElement {
     h.focus();
   }
 
-  private field(label: string, input: HTMLInputElement | HTMLTextAreaElement): HTMLElement {
+  private field(label: string, input: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement): HTMLElement {
     const id = `fd-${label.toLowerCase().replace(/\W+/g, '-')}`;
     input.id = id;
     const wrap = el('div', { class: 'field' });
@@ -340,10 +443,14 @@ class FrontdeskChat extends HTMLElement {
     return { box, input };
   }
 
-  private async post<T>(path: string, body: unknown): Promise<{ ok: true; data: T } | { ok: false; error: string; code?: string }> {
+  private async post<T>(
+    path: string,
+    body: unknown,
+    method: 'POST' | 'DELETE' = 'POST',
+  ): Promise<{ ok: true; data: T } | { ok: false; error: string; code?: string }> {
     try {
       const res = await fetch(`${this.api}/api/widget/${this.key}/${path}`, {
-        method: 'POST',
+        method,
         credentials: 'omit',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
@@ -477,7 +584,8 @@ class FrontdeskChat extends HTMLElement {
 
   private add(m: ChatMessage): HTMLElement {
     const bubble = el('div', { class: `msg ${m.role}` });
-    if (m.role === 'staff' && m.authorName) bubble.append(el('span', { class: 'who' }, m.authorName));
+    // Staff names, and the label on the demo's replayed sample answers.
+    if ((m.role === 'staff' || m.role === 'assistant') && m.authorName) bubble.append(el('span', { class: 'who' }, m.authorName));
     bubble.append(el('span', { class: 'body' }, m.content));
     if (m.sources.length) {
       const list = el('ul', { class: 'sources', 'aria-label': 'Sources' });

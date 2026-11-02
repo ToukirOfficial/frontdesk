@@ -1,6 +1,7 @@
 'use client';
 
 import type { Usage } from '@frontdesk/shared';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -40,6 +41,35 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
+/** Shown until someone adds an AI key (or the server has one): the app works, but the assistant can't answer. */
+function SetupCard() {
+  const { workspace } = useWorkspace();
+  return (
+    <Card className="border-amber-200 bg-amber-50/60">
+      <CardHeader>
+        <CardTitle>
+          <h2>Add an AI provider to switch the assistant on</h2>
+        </CardTitle>
+        <CardDescription className="text-amber-950/80">
+          Frontdesk works with your own AI key: Anthropic, OpenAI, Google Gemini, or any OpenAI-compatible endpoint, including a
+          model you host yourself with Ollama. Your provider bills you directly. Until a key is added, the chat on your website says
+          no AI provider is configured and offers to take a message instead. Everything else (knowledge, enquiries, live chat with
+          your team) already works.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {canManage(workspace) ? (
+          <Button asChild>
+            <Link href={`/w/${workspace.id}/ai`}>Add your AI key</Link>
+          </Button>
+        ) : (
+          <p className="text-sm">Ask an owner or admin to add one under AI provider.</p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function UsageCards() {
   const { workspace } = useWorkspace();
   const { data, error, loading, reload } = useApi<Usage>(`/workspaces/${workspace.id}/usage`);
@@ -49,6 +79,7 @@ function UsageCards() {
   const pct = data.monthlyTokenCap ? Math.min(100, Math.round((used / data.monthlyTokenCap) * 100)) : 100;
   return (
     <div className="grid gap-4">
+      {data.ai === 'none' && <SetupCard />}
       {data.mode === 'message' && (
         <p role="alert" className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
           This month’s AI limit is reached, so the chat is taking messages only. Raise the limit below or wait for next month.

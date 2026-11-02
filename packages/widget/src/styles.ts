@@ -68,4 +68,11 @@ export const MORE_STYLES = `
 .day { margin: 6px 0 4px; font-size: 13px; font-weight: 600; }
 .muted { color: var(--fd-muted); font-size: 13px; margin: 0; }
 .form-error { color: #b42318; font-size: 13px; margin: 0; }
+.banner { margin: 0; padding: 8px 14px; font-size: 13px; line-height: 1.4; border-bottom: 1px solid var(--fd-line, #e5e7eb); background: #f8fafc; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+.banner[hidden], .suggest[hidden] { display: none; }
+.banner strong { font-weight: 600; }
+.linkish { background: none; border: 0; padding: 0; font: inherit; color: var(--fd-brand); text-decoration: underline; cursor: pointer; }
+.suggest { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px 0; }
+.suggest .chip { text-align: left; }
+.field select { font: inherit; padding: 8px; border: 1px solid #d0d5dd; border-radius: 8px; background: #fff; }
 `;
