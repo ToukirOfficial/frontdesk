@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import type { NextConfig } from 'next';
 
 // The dashboard calls the API on its own origin: /api/* is proxied to NestJS, so auth cookies stay first-party.
@@ -8,6 +9,8 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   devIndicators: false,
   output: 'standalone',
+  // The monorepo root, so the standalone build includes the workspace packages.
+  outputFileTracingRoot: fileURLToPath(new URL('../../', import.meta.url)),
   async rewrites() {
     return [{ source: '/api/:path*', destination: `${apiUrl}/api/:path*` }];
   },
