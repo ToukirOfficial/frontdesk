@@ -5,7 +5,9 @@
 
 A free, open-source, self-hosted AI receptionist for small business websites. It answers visitors’ questions from the business’s own information, takes enquiries, books appointments and hands over to a person when it isn’t sure.
 
-> Demo GIF: to be recorded from the live demo.
+**[Try the live demo →](https://frontdesk.toukirahmedrony.com/demo)** It replays recorded sample answers, or you can use your own key for live answers.
+
+![A visitor opens the chat on a demo clinic website, picks a suggested question and gets an answer with its sources; a member of staff sees the conversation live in the dashboard, takes over and replies, and the visitor sees the reply](docs/media/demo.gif)
 
 **Bring your own key:** works with Anthropic, OpenAI, Gemini or any OpenAI-compatible endpoint, including self-hosted models with Ollama. The project ships no AI model and pays for none: you (or each business) add a key, and the provider bills you directly. With no key at all, Frontdesk still starts and everything except AI answers works.
 
@@ -143,7 +145,7 @@ evals/            The evaluation set (cases.json) and its runner (run.mjs)
 
 ## Hard problems and decisions
 
-- **Filtered vector search can silently return nothing.** An HNSW index plus a workspace filter drops results when other workspaces hold closer chunks. Frontdesk uses pgvector 0.8’s iterative scans, or an exact scan on older pgvector ([0001](docs/decisions/0001-filtered-vector-search.md)).
+- **Filtered vector search can silently return nothing.** An HNSW index plus a workspace filter drops results when other workspaces hold closer chunks. Frontdesk uses pgvector 0.8’s iterative scans. On older pgvector (e.g. 0.6 from Ubuntu’s package, as on the live demo) it detects the version and falls back to an exact search of that workspace’s chunks automatically ([0001](docs/decisions/0001-filtered-vector-search.md)).
 - **Indirect prompt injection** from imported pages and documents ([0002](docs/decisions/0002-grounding-and-prompt-injection.md)).
 - **SSRF.** Website import and Slotwise fetch addresses typed by admins. Every fetch resolves DNS itself, refuses private, loopback, link-local and cloud-metadata addresses (IPv4 and IPv6), connects to the vetted IP, follows no redirects, and has a timeout and a size limit (`apps/api/src/net/safe-fetch.ts`).
 - **Two people taking over the same chat** is one conditional database update; exactly one wins ([0003](docs/decisions/0003-realtime-and-handover.md)).
@@ -188,3 +190,5 @@ Without `SMTP_URL`, your login code is written to `apps/api/tmp/mail/`. Seed the
 ## Licence
 
 AGPL-3.0
+
+Built by [Toukir Ahmed Rony](https://toukirahmedrony.com).
