@@ -88,4 +88,4 @@ Each phase ends with `pnpm typecheck && pnpm lint && pnpm test && pnpm build`, t
 
 ## Progress
 
-- [x] Phase 1 (2026-11-02: 34 API tests, typecheck/lint/build clean, audit has no high/critical) · [ ] Phase 2 · [ ] Phase 3 · [ ] Phase 4 · [ ] Phase 5 · [ ] Phase 6
+- [x] Phase 1 (2026-11-02: 34 API tests, typecheck/lint/build clean, audit has no high/critical) · [x] Phase 2 (2026-11-02: 87 API tests; local embedding model not run here, Hugging Face is blocked in this environment) · [ ] Phase 3 · [ ] Phase 4 · [ ] Phase 5 · [ ] Phase 6

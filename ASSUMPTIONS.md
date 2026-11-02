@@ -11,6 +11,15 @@ Decisions made where `PRD.md` and `plan.md` leave room. Each is easy to change.
 - **Someone else's workspace is "not found", not "forbidden",** so ids reveal nothing.
 - **Access tokens carry only the user id.** Roles are read from the database on every workspace request, so removing someone takes effect immediately.
 
+## Knowledge
+
+- **Only owners and admins** manage knowledge, business details and assistant settings.
+- **Website import** reads up to 25 pages (10 by default) from the same site (`www.` ignored), breadth first. Scripts, styles, menus, footers and forms are dropped. A redirect to another site stops that page. Plain http is allowed outside production.
+- **Files:** PDF and DOCX up to 10 MB, checked by their bytes. PDFs over 300 pages are refused. Text is read in the worker with a 60-second limit.
+- **Editing:** FAQs and text pages can be edited. Files and websites can be renamed, processed again or deleted, not edited.
+- **Embeddings:** the default `local` model (all-MiniLM-L6-v2, 384 dimensions) downloads once to `MODEL_CACHE_DIR` on first use. Changing `EMBEDDING_PROVIDER` later means processing knowledge again.
+- **Slotwise:** the key is checked only for shape when saved. The first real call (Phase 4) shows whether it works.
+
 ## Running locally
 
 - Without `SMTP_URL`, the worker writes each email to `apps/api/tmp/mail/*.eml` (git-ignored) instead of sending it, so you can read your login code. Email contents never go to the logs.
