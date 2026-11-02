@@ -335,13 +335,24 @@ class FrontdeskChat extends HTMLElement {
     if (!(await this.sendText(text))) this.input.value = text;
   }
 
+  /** A suggestion can be tapped the moment the panel opens, before the chat has connected: wait a little. */
+  private async connected(): Promise<boolean> {
+    for (let i = 0; i < 50 && !this.socket?.connected; i++) await new Promise((r) => setTimeout(r, 100));
+    return Boolean(this.socket?.connected);
+  }
+
   private async sendText(text: string): Promise<boolean> {
-    if (this.busy || !this.socket) return false;
+    if (this.busy) return false;
+    const socket = (await this.connected()) ? this.socket : undefined;
+    if (!socket) {
+      this.showError('The chat is still connecting. Please try again in a moment.');
+      return false;
+    }
     this.busy = true;
     this.sendBtn.disabled = true;
     this.errorLine.hidden = true;
     this.lastVisitorText = text;
-    const ack = await this.socket
+    const ack = await socket
       .timeout(90_000)
       .emitWithAck('message', { text })
       .catch((): AckResult => ({ ok: false, error: 'No answer. Check your connection and try again.' }));
@@ -583,6 +594,7 @@ class FrontdeskChat extends HTMLElement {
   }
 
   private add(m: ChatMessage): HTMLElement {
+    if (m.role === 'visitor') this.suggest.classList.add('compact');
     const bubble = el('div', { class: `msg ${m.role}` });
     // Staff names, and the label on the demo's replayed sample answers.
     if ((m.role === 'staff' || m.role === 'assistant') && m.authorName) bubble.append(el('span', { class: 'who' }, m.authorName));
