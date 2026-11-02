@@ -37,6 +37,8 @@ jobs:
       JWT_SECRET: ci-only-jwt-secret-not-used-anywhere-else-000
       CODE_SECRET: ci-only-code-secret-not-used-anywhere-else-00
       ENCRYPTION_KEY: '0000000000000000000000000000000000000000000000000000000000000000'
+      # Optional repository secret. Without it, CI only dry-runs the evaluation set.
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
@@ -50,3 +52,11 @@ jobs:
       - run: pnpm test
       - run: pnpm build
       - run: pnpm audit --audit-level high
+      - name: Evaluation set (dry run, no API calls)
+        run: pnpm eval --dry
+      - name: Evaluation set (small, real model)
+        if: ${{ env.ANTHROPIC_API_KEY != '' }}
+        env:
+          AI_PROVIDER: anthropic
+          EMBEDDING_PROVIDER: local
+        run: pnpm eval --small

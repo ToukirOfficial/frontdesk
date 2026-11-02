@@ -1,9 +1,9 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { DAYS, type Day, openingHoursSchema, type Preset, type SourceRef } from '@frontdesk/shared';
+import { openingHoursSchema, type Preset, type SourceRef } from '@frontdesk/shared';
 import { z } from 'zod';
 import { type ChatProvider, CHAT_PROVIDER, type ChatTurn } from '../ai/chat-provider.js';
 import { EMBEDDER, type Embedder } from '../ai/embeddings.js';
-import { ASSISTANT_TOOLS, buildInstructions, buildReference, type PromptBusiness } from '../ai/prompts.js';
+import { ASSISTANT_TOOLS, buildInstructions, buildReference, formatHours, type PromptBusiness } from '../ai/prompts.js';
 import { assistantContextKey } from '../business/business.service.js';
 import { VectorStore } from '../knowledge/vector-store.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -12,15 +12,6 @@ import { RedisService } from '../redis/redis.service.js';
 const K = 5;
 const HISTORY = 12;
 const MAX_TOKENS = 800;
-const DAY_NAME: Record<Day, string> = {
-  mon: 'Monday',
-  tue: 'Tuesday',
-  wed: 'Wednesday',
-  thu: 'Thursday',
-  fri: 'Friday',
-  sat: 'Saturday',
-  sun: 'Sunday',
-};
 
 export const FALLBACK_UNANSWERED =
   'I’m sorry, I don’t have that information. I can take a message for the team, or pass you to a member of staff.';
@@ -135,15 +126,7 @@ export class AssistantService {
     });
     const b = ws.business;
     const hours = openingHoursSchema.safeParse(b?.openingHours);
-    const hoursText = hours.success
-      ? [
-          ...DAYS.map((d) => {
-            const h = hours.data[d];
-            return `${DAY_NAME[d]}: ${h.closed ? 'closed' : `${h.open}–${h.close}`}`;
-          }),
-          ...(hours.data.notes ? [`Notes: ${hours.data.notes}`] : []),
-        ].join('\n')
-      : 'not given';
+    const hoursText = formatHours(hours.success ? hours.data : null);
     const ctx: AssistantContext = {
       business: {
         name: b?.name || ws.name,

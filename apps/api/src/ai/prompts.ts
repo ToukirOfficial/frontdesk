@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import type { Preset } from '@frontdesk/shared';
+import { DAYS, type Day, type OpeningHours, type Preset } from '@frontdesk/shared';
 
 /** Prompts live in versioned files (apps/api/prompts), so the evaluation set tests exactly what the app uses. */
 export const PROMPT_VERSION = 'v1';
@@ -19,6 +19,25 @@ const PRESETS: Record<Preset, string> = {
 export const sanitiseData = (text: string): string => text.replace(/<\s*\/?\s*untrusted_data[^>]*>/gi, '[removed tag]');
 
 const oneLine = (s: string) => sanitiseData(s).replace(/\s+/g, ' ').trim();
+
+const DAY_NAME: Record<Day, string> = {
+  mon: 'Monday',
+  tue: 'Tuesday',
+  wed: 'Wednesday',
+  thu: 'Thursday',
+  fri: 'Friday',
+  sat: 'Saturday',
+  sun: 'Sunday',
+};
+
+/** Opening hours as the assistant reads them: one line per day, then any notes. */
+export const formatHours = (hours: OpeningHours | null): string =>
+  hours
+    ? [
+        ...DAYS.map((d) => `${DAY_NAME[d]}: ${hours[d].closed ? 'closed' : `${hours[d].open}–${hours[d].close}`}`),
+        ...(hours.notes ? [`Notes: ${hours.notes}`] : []),
+      ].join('\n')
+    : 'not given';
 
 export interface PromptBusiness {
   name: string;
