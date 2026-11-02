@@ -29,6 +29,10 @@ export const ErrorCode = {
   FILE_REJECTED: 'FILE_REJECTED',
   URL_REJECTED: 'URL_REJECTED',
   NOT_EDITABLE: 'NOT_EDITABLE',
+  ALREADY_TAKEN: 'ALREADY_TAKEN',
+  NOT_ASSIGNED: 'NOT_ASSIGNED',
+  SLOT_TAKEN: 'SLOT_TAKEN',
+  BOOKING_UNAVAILABLE: 'BOOKING_UNAVAILABLE',
 } as const;
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
 

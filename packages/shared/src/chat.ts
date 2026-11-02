@@ -38,6 +38,10 @@ export const widgetConfigSchema = z.object({
   avatarUrl: z.string().nullable(),
   /** chat: the assistant answers. message: leave-a-message only (e.g. the monthly cap is reached). */
   mode: z.enum(['chat', 'message']),
+  /** slotwise: book inside the chat. link: open the booking link. none: no booking. */
+  booking: z.enum(['slotwise', 'link', 'none']),
+  bookingUrl: z.string().nullable(),
+  consentText: z.string(),
 });
 export type WidgetConfig = z.infer<typeof widgetConfigSchema>;
 
@@ -73,5 +77,9 @@ export interface VisitorServerEvents {
   'reply:delta': (e: { id: string; text: string }) => void;
   'reply:end': (m: ChatMessage) => void;
   'reply:error': (e: { message: string }) => void;
+  /** A person has joined or left; the widget shows who it's talking to. */
+  mode: (e: { mode: 'ai' | 'human' | 'closed'; staffName: string | null }) => void;
+  /** Nobody is available: the widget opens the leave-a-message form. */
+  'handover:unavailable': () => void;
 }
 export type Ack = (res: { ok: true } | { ok: false; error: string }) => void;
