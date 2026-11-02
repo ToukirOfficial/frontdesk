@@ -7,3 +7,6 @@ process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
 process.env.REDIS_PREFIX = 'frontdesk-test';
 process.env.WEB_URL = 'http://localhost:8025';
 process.env.DEMO_MODE = 'false';
+process.env.EMBEDDING_PROVIDER = 'fake';
+process.env.STORAGE_DIR = `${process.cwd()}/tmp/test-storage`;
+process.env.ALLOW_PRIVATE_URLS = 'false';
