@@ -20,6 +20,16 @@ Decisions made where `PRD.md` and `plan.md` leave room. Each is easy to change.
 - **Embeddings:** the default `local` model (all-MiniLM-L6-v2, 384 dimensions) downloads once to `MODEL_CACHE_DIR` on first use. Changing `EMBEDDING_PROVIDER` later means processing knowledge again.
 - **Slotwise:** the key is checked only for shape when saved. The first real call (Phase 4) shows whether it works.
 
+## Assistant and widget
+
+- **Model:** `ANTHROPIC_MODEL` defaults to `claude-opus-5-5` at `ANTHROPIC_EFFORT=low` (short receptionist replies), with Anthropic's server-side refusal fallback on (`ANTHROPIC_FALLBACKS=default`). For lower cost set `ANTHROPIC_MODEL=claude-haiku-5-5` and `ANTHROPIC_FALLBACKS=off` (Haiku has no server-side fallback). `OPENAI_CHAT_MODEL` defaults to `gpt-4.1-mini`; I couldn't confirm current OpenAI model names from an official source, so set it yourself.
+- **Without an API key** the API still starts; each reply becomes a polite "leave a message" fallback.
+- **Grounding:** each question retrieves the 5 nearest knowledge extracts. Business details are always included. Both are wrapped in `<untrusted_data>` tags, and any such tags inside the data are neutralised. The model reports gaps with `report_unanswered` and citations with `cite_sources`; sources shown to visitors come only from those calls.
+- **Allowed websites:** an empty list means any website may show the chat (handy while testing); the dashboard says so.
+- **Visitor tokens** are kept in the customer site's `localStorage`, so a conversation resumes after a page reload. They grant access to that one conversation only, and are rejected as dashboard logins (separate JWT audience).
+- **Sockets** are served at `/api/socket.io` with no trailing slash, so they pass through the Next.js `/api` rewrite in development. In production, route `/api` (including WebSocket upgrades) to the API.
+- **Basic chat rate limits** (per visitor 10/min, per IP 30/min, per workspace 300/min) are in from Phase 3; Phase 5 adds the monthly spend cap.
+
 ## Running locally
 
 - Without `SMTP_URL`, the worker writes each email to `apps/api/tmp/mail/*.eml` (git-ignored) instead of sending it, so you can read your login code. Email contents never go to the logs.
