@@ -5,6 +5,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { ErrorCode, type ErrorBody } from '@frontdesk/shared';
 import type { NextFunction, Request, Response } from 'express';
 import { AppModule } from './app.module.js';
+import { RedisIoAdapter } from './chat/redis-io.adapter.js';
 import { ErrorFilter } from './common/errors.js';
 import { makeLogger } from './common/logger.js';
 import { requestIdMiddleware } from './common/request-context.js';
@@ -78,6 +79,7 @@ export const createApp = async (config: AppConfig): Promise<INestApplication> =>
   app.useGlobalPipes(validationPipe);
   app.useGlobalInterceptors(new StandardSchemaSerializerInterceptor(app.get(Reflector)));
   app.useGlobalFilters(new ErrorFilter());
+  app.useWebSocketAdapter(new RedisIoAdapter(app, config));
   app.enableShutdownHooks();
   return app;
 };

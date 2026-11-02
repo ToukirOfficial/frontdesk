@@ -7,7 +7,12 @@ import {
   ErrorCode,
   openingHoursSchema,
   type SlotwiseBody,
+  type WidgetSettingsBody,
 } from '@frontdesk/shared';
+import { randomUUID } from 'node:crypto';
+import { fileTypeFromBuffer } from 'file-type';
+import { deleteAvatar, saveAvatar } from '../chat/avatars.js';
+import { widgetCacheKey } from '../chat/widget.service.js';
 import type { WorkspaceAuth } from '../common/auth.js';
 import { encrypt } from '../common/crypto.js';
 import { AppError } from '../common/errors.js';
@@ -51,16 +56,80 @@ export class BusinessService {
       update: body,
     });
     await this.redis.del(assistantContextKey(auth.workspaceId));
+    await this.clearWidgetCache(auth.workspaceId); // the widget shows the business name
     return this.getProfile(auth);
   }
 
   async getAssistant(auth: WorkspaceAuth): Promise<AssistantSettings> {
-    const row = await this.prisma.assistantSettings.findUnique({ where: { workspaceId: auth.workspaceId } });
+    const ws = await this.prisma.workspace.findUniqueOrThrow({
+      where: { id: auth.workspaceId },
+      include: { assistant: true },
+    });
+    const row = ws.assistant;
     return {
       preset: row?.preset ?? 'general',
       rules: row?.rules ?? '',
       slotwise: { connected: Boolean(row?.slotwiseKeyCipher), baseUrl: row?.slotwiseBaseUrl ?? null },
+      widget: {
+        publicKey: ws.publicKey,
+        greeting: row?.greeting ?? 'Hello! How can I help you today?',
+        brandColour: row?.brandColour ?? '#0f766e',
+        position: row?.position === 'left' ? 'left' : 'right',
+        allowedOrigins: ws.allowedOrigins,
+        hasAvatar: Boolean(row?.avatarName),
+      },
     };
+  }
+
+  async putWidget(auth: WorkspaceAuth, body: WidgetSettingsBody): Promise<AssistantSettings> {
+    const { allowedOrigins, ...look } = body;
+    const ws = await this.prisma.$transaction(async (tx) => {
+      await tx.assistantSettings.upsert({
+        where: { workspaceId: auth.workspaceId },
+        create: { workspaceId: auth.workspaceId, ...look },
+        update: look,
+      });
+      return tx.workspace.update({
+        where: { id: auth.workspaceId },
+        data: { allowedOrigins: [...new Set(allowedOrigins)] },
+        select: { publicKey: true },
+      });
+    });
+    await this.redis.del(widgetCacheKey(ws.publicKey));
+    return this.getAssistant(auth);
+  }
+
+  /** PNG, JPEG or WebP up to 256 KB, checked by content, stored under a random name. */
+  async putAvatar(auth: WorkspaceAuth, file: { buffer: Buffer; size: number }): Promise<AssistantSettings> {
+    const type = await fileTypeFromBuffer(file.buffer);
+    const ext = type?.mime === 'image/png' ? 'png' : type?.mime === 'image/jpeg' ? 'jpg' : type?.mime === 'image/webp' ? 'webp' : null;
+    if (!ext) throw new AppError(400, ErrorCode.FILE_REJECTED, 'Use a PNG, JPEG or WebP image.');
+    const name = `${randomUUID()}.${ext}`;
+    await saveAvatar(this.config, name, file.buffer);
+    const before = await this.prisma.assistantSettings.findUnique({ where: { workspaceId: auth.workspaceId } });
+    await this.prisma.assistantSettings.upsert({
+      where: { workspaceId: auth.workspaceId },
+      create: { workspaceId: auth.workspaceId, avatarName: name },
+      update: { avatarName: name },
+    });
+    if (before?.avatarName) await deleteAvatar(this.config, before.avatarName);
+    await this.clearWidgetCache(auth.workspaceId);
+    return this.getAssistant(auth);
+  }
+
+  async deleteAvatarFor(auth: WorkspaceAuth): Promise<AssistantSettings> {
+    const before = await this.prisma.assistantSettings.findUnique({ where: { workspaceId: auth.workspaceId } });
+    if (before?.avatarName) {
+      await this.prisma.assistantSettings.update({ where: { id: before.id }, data: { avatarName: null } });
+      await deleteAvatar(this.config, before.avatarName);
+      await this.clearWidgetCache(auth.workspaceId);
+    }
+    return this.getAssistant(auth);
+  }
+
+  private async clearWidgetCache(workspaceId: string): Promise<void> {
+    const ws = await this.prisma.workspace.findUnique({ where: { id: workspaceId }, select: { publicKey: true } });
+    if (ws) await this.redis.del(widgetCacheKey(ws.publicKey));
   }
 
   async putAssistant(auth: WorkspaceAuth, body: AssistantSettingsBody): Promise<AssistantSettings> {

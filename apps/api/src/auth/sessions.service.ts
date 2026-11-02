@@ -13,6 +13,10 @@ export interface AccessPayload {
   sub: string;
 }
 
+/** Dashboard and visitor tokens share a signing key, so each carries its audience and is checked for it. */
+export const DASHBOARD_AUDIENCE = 'frontdesk-dashboard';
+export const VISITOR_AUDIENCE = 'frontdesk-visitor';
+
 export interface IssuedTokens {
   userId: string;
   access: string;
@@ -92,7 +96,7 @@ export class SessionsService {
       return created;
     });
     const payload: AccessPayload = { sub: userId };
-    const access = await this.jwt.signAsync(payload, { expiresIn: ACCESS_TTL_SEC });
+    const access = await this.jwt.signAsync(payload, { expiresIn: ACCESS_TTL_SEC, audience: DASHBOARD_AUDIENCE });
     return { userId, access, refresh: `${row.id}.${secret}` };
   }
 }

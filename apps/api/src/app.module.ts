@@ -10,6 +10,15 @@ import { AuthService } from './auth/auth.service.js';
 import { SessionsService } from './auth/sessions.service.js';
 import type { AppConfig } from './config.js';
 import { CoreModule } from './core.module.js';
+import { CHAT_PROVIDER } from './ai/chat-provider.js';
+import { createEmbedder, EMBEDDER } from './ai/embeddings.js';
+import { createChatProvider } from './ai/providers.js';
+import { AssistantService } from './chat/assistant.service.js';
+import { VisitorGateway } from './chat/visitor.gateway.js';
+import { WidgetController } from './chat/widget.controller.js';
+import { WidgetService } from './chat/widget.service.js';
+import { APP_CONFIG } from './config.js';
+import { VectorStore } from './knowledge/vector-store.js';
 import { HealthController } from './health/health.controller.js';
 import { InvitesController } from './workspaces/invites.controller.js';
 import { InvitesService } from './workspaces/invites.service.js';
@@ -36,13 +45,27 @@ class BusinessModule {}
 @Module({ controllers: [KnowledgeController], providers: [KnowledgeService] })
 class KnowledgeModule {}
 
+@Module({
+  controllers: [WidgetController],
+  providers: [
+    WidgetService,
+    AssistantService,
+    VisitorGateway,
+    VectorStore,
+    { provide: EMBEDDER, useFactory: createEmbedder, inject: [APP_CONFIG] },
+    { provide: CHAT_PROVIDER, useFactory: createChatProvider, inject: [APP_CONFIG] },
+  ],
+  exports: [WidgetService],
+})
+class ChatModule {}
+
 /** The HTTP API (src/main.ts). */
 @Module({})
 export class AppModule {
   static forConfig(config: AppConfig): DynamicModule {
     return {
       module: AppModule,
-      imports: [CoreModule.forConfig(config), AuthModule, WorkspacesModule, BusinessModule, KnowledgeModule],
+      imports: [CoreModule.forConfig(config), AuthModule, WorkspacesModule, BusinessModule, KnowledgeModule, ChatModule],
       controllers: [HealthController],
       providers: [{ provide: APP_GUARD, useClass: AuthGuard }],
     };

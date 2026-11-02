@@ -7,7 +7,7 @@ import { ACCESS_COOKIE, readCookie } from '../common/cookies.js';
 import { AppError, forbidden, notFound, unauthenticated } from '../common/errors.js';
 import { UUID_RE } from '../common/ids.js';
 import { PrismaService } from '../prisma/prisma.service.js';
-import type { AccessPayload } from './sessions.service.js';
+import { type AccessPayload, DASHBOARD_AUDIENCE } from './sessions.service.js';
 
 /**
  * Global guard, deny by default. A route is reachable only if it says @Public(), @LoggedIn() or @Roles(...).
@@ -24,9 +24,11 @@ export class AuthGuard implements CanActivate {
   ) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
-    if (ctx.getType() !== 'http') return false; // WebSocket gateways authenticate on connect
     const targets = [ctx.getHandler(), ctx.getClass()];
-    if (this.reflector.getAllAndOverride<boolean>(IS_PUBLIC, targets)) return true;
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC, targets);
+    // WebSocket gateways authenticate each socket on connect; a gateway must still say @Public() to be reachable.
+    if (ctx.getType() !== 'http') return Boolean(isPublic);
+    if (isPublic) return true;
 
     const roles = this.reflector.getAllAndOverride<Role[] | undefined>(ROLES, targets);
     const loggedIn = this.reflector.getAllAndOverride<boolean>(LOGGED_IN, targets);
@@ -56,7 +58,7 @@ export class AuthGuard implements CanActivate {
     const token = readCookie(req, ACCESS_COOKIE);
     if (!token) throw unauthenticated();
     try {
-      const payload = await this.jwt.verifyAsync<AccessPayload>(token);
+      const payload = await this.jwt.verifyAsync<AccessPayload>(token, { audience: DASHBOARD_AUDIENCE });
       return payload.sub;
     } catch {
       throw new AppError(401, ErrorCode.SESSION_EXPIRED, 'Your session has expired.');
