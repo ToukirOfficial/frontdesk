@@ -109,6 +109,7 @@ model Workspace {
   messages      Message[]
   unanswered    UnansweredQuestion[]
   usage         UsageMonth[]
+  enquiries     Enquiry[]
 
   @@map("workspaces")
 }
@@ -277,6 +278,8 @@ model Conversation {
   visitorId      String           @map("visitor_id")
   mode           ConversationMode @default(ai)
   assignedUserId String?          @map("assigned_user_id") @db.Uuid
+  /// Set when the visitor asks for a person and staff are online; cleared on takeover.
+  handoverRequestedAt DateTime?   @map("handover_requested_at") @db.Timestamptz(3)
   lastMessageAt  DateTime         @default(now()) @map("last_message_at") @db.Timestamptz(3)
   createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -284,6 +287,7 @@ model Conversation {
   workspace  Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   messages   Message[]
   unanswered UnansweredQuestion[]
+  enquiries  Enquiry[]
 
   @@index([workspaceId, lastMessageAt])
   @@map("conversations")
@@ -344,4 +348,28 @@ model UsageMonth {
 
   @@unique([workspaceId, month])
   @@map("usage_months")
+}
+
+/// A message left by a visitor in the chat, emailed to the business.
+model Enquiry {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  workspaceId    String    @map("workspace_id") @db.Uuid
+  conversationId String?   @map("conversation_id") @db.Uuid
+  name           String
+  email          String?
+  phone          String?
+  need           String
+  /// The consent wording the visitor agreed to, and when
+  consentText    String    @map("consent_text")
+  consentAt      DateTime  @map("consent_at") @db.Timestamptz(3)
+  emailedAt      DateTime? @map("emailed_at") @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([conversationId])
+  @@map("enquiries")
 }
