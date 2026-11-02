@@ -1,6 +1,7 @@
 import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
+import { AiResolver } from '../ai/ai-resolver.js';
 import { APP_CONFIG, type AppConfig } from '../config.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { KNOWLEDGE_QUEUE, type KnowledgeJob } from '../queues.js';
@@ -19,6 +20,7 @@ export class DemoService {
     @Inject(RedisService) private readonly redis: RedisService,
     @InjectQueue(KNOWLEDGE_QUEUE) private readonly queue: Queue<KnowledgeJob>,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
+    @Inject(AiResolver) private readonly ai: AiResolver,
   ) {}
 
   /** Idempotent: settings are put back to the demo values; knowledge is added only if the clinic has none. */
@@ -61,7 +63,10 @@ export class DemoService {
     return ws.id;
   }
 
-  /** Nightly: every visitor conversation, enquiry and unanswered question in the demo goes; settings are restored. */
+  /**
+   * Nightly: every visitor conversation, enquiry and unanswered question in the demo goes, and every visitor's own
+   * key with them (they expire after 24 hours anyway); settings are restored.
+   */
   async reset(): Promise<void> {
     const ws = await this.prisma.workspace.findFirst({ where: { isDemo: true } });
     if (ws) {
@@ -70,7 +75,9 @@ export class DemoService {
         this.prisma.enquiry.deleteMany({ where: { workspaceId: ws.id } }),
         this.prisma.unansweredQuestion.deleteMany({ where: { workspaceId: ws.id } }),
       ]);
+      await this.prisma.aiSettings.deleteMany({ where: { workspaceId: ws.id } });
     }
+    await this.ai.deleteAllDemoKeys();
     await this.seed();
     this.log.log('Demo reset');
   }

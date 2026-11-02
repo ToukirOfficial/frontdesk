@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { type ChatMessage, consentText, ErrorCode, type SourceRef, sourceRefSchema, type WidgetConfig } from '@frontdesk/shared';
+import { type ChatMessage, consentText, ErrorCode, type SourceRef, sourceRefSchema, type WidgetConfig, type WidgetSession } from '@frontdesk/shared';
 import { z } from 'zod';
+import { AiResolver } from '../ai/ai-resolver.js';
 import { VISITOR_AUDIENCE } from '../auth/sessions.service.js';
+import { replaySet } from '../demo/replay.js';
 import { AppError, notFound } from '../common/errors.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { RedisService } from '../redis/redis.service.js';
@@ -54,6 +56,7 @@ export class WidgetService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(RedisService) private readonly redis: RedisService,
     @Inject(JwtService) private readonly jwt: JwtService,
+    @Inject(AiResolver) private readonly ai: AiResolver,
   ) {}
 
   async byKey(publicKey: string): Promise<WidgetInfo> {
@@ -93,8 +96,12 @@ export class WidgetService {
   }
 
   /** avatarUrl is relative to the Frontdesk server; the widget resolves it against the address it loaded from. */
-  config(info: WidgetInfo, mode: WidgetConfig['mode']): WidgetConfig {
+  async config(info: WidgetInfo, mode: WidgetConfig['mode']): Promise<WidgetConfig> {
+    const source = await this.ai.source(info.workspaceId, info.isDemo);
+    const ai: WidgetConfig['ai'] = source === 'demo' ? 'replay' : source === 'none' ? 'none' : 'ready';
     return {
+      ai,
+      suggestions: ai === 'replay' ? replaySet().items.map((i) => i.question) : [],
       name: info.name,
       greeting: info.greeting,
       brandColour: info.brandColour,
@@ -108,7 +115,10 @@ export class WidgetService {
   }
 
   /** Resumes the visitor's conversation if their token is valid for THIS workspace, otherwise starts a new one. */
-  async session(info: WidgetInfo, token: string | undefined): Promise<{ token: string; conversationId: string; messages: ChatMessage[] }> {
+  async session(
+    info: WidgetInfo,
+    token: string | undefined,
+  ): Promise<WidgetSession> {
     const claims = token ? await this.verify(token) : null;
     let conversation =
       claims && claims.wid === info.workspaceId
@@ -129,6 +139,8 @@ export class WidgetService {
       token: await this.jwt.signAsync(fresh, { audience: VISITOR_AUDIENCE, expiresIn: VISITOR_TOKEN_TTL_SEC }),
       conversationId: conversation.id,
       messages: messages.map(toChatMessage),
+      mode: conversation.mode,
+      demoKey: info.isDemo ? await this.ai.demoKeyInfo(conversation.id) : null,
     };
   }
 

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { demoKeyInfoSchema } from './ai.js';
 import { instantSchema } from './common.js';
 
 /** A site allowed to load the widget, normalised to its origin (https://www.example.co.uk). */
@@ -42,6 +43,10 @@ export const widgetConfigSchema = z.object({
   booking: z.enum(['slotwise', 'link', 'none']),
   bookingUrl: z.string().nullable(),
   consentText: z.string(),
+  /** ready: the assistant answers. none: no AI provider configured. replay: the public demo's sample answers. */
+  ai: z.enum(['ready', 'none', 'replay']),
+  /** Replay only: the questions a visitor can pick. */
+  suggestions: z.array(z.string()),
 });
 export type WidgetConfig = z.infer<typeof widgetConfigSchema>;
 
@@ -64,6 +69,10 @@ export const widgetSessionSchema = z.object({
   token: z.string(),
   conversationId: z.uuid(),
   messages: z.array(chatMessageSchema),
+  /** ai: the assistant answers; human: a member of staff has the chat. */
+  mode: z.enum(['ai', 'human', 'closed']),
+  /** Demo only: the visitor's own key for this conversation, if they added one (last 4 characters only). */
+  demoKey: demoKeyInfoSchema.nullable(),
 });
 export type WidgetSession = z.infer<typeof widgetSessionSchema>;
 

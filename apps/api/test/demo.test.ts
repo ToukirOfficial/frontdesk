@@ -1,6 +1,7 @@
 import { Queue } from 'bullmq';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { clientIp } from '../src/chat/client-ip.js';
+import { AiResolver } from '../src/ai/ai-resolver.js';
 import { DemoService } from '../src/demo/demo.service.js';
 import { KNOWLEDGE_QUEUE } from '../src/queues.js';
 import { redisOptions } from '../src/redis/redis.service.js';
@@ -13,7 +14,7 @@ describe('demo mode', () => {
   beforeAll(async () => {
     t = await startApp({ DEMO_MODE: 'true', DEMO_MONTHLY_TOKEN_CAP: '50000' });
     queue = new Queue(KNOWLEDGE_QUEUE, { connection: redisOptions(t.config.REDIS_URL), prefix: `${t.config.REDIS_PREFIX}:bull` });
-    demo = new DemoService(t.prisma, t.redis, queue as never, t.config);
+    demo = new DemoService(t.prisma, t.redis, queue as never, t.config, t.app.get(AiResolver));
   });
   afterAll(async () => {
     await queue.close();
