@@ -48,6 +48,7 @@ const connect = (key: string, token: string, origin?: string): Promise<Socket> =
       auth: { key, token },
       extraHeaders: origin ? { origin } : {},
       reconnection: false,
+      forceNew: true,
     });
     socket.on('connect', () => {
       // The server may still drop us after its async checks.

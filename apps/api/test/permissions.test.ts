@@ -29,6 +29,10 @@ const PUBLIC_ROUTES = new Set([
   'GET /widget/:publicKey/config',
   'POST /widget/:publicKey/session',
   'GET /widget/:publicKey/avatar',
+  'POST /widget/:publicKey/enquiry',
+  'POST /widget/:publicKey/booking/services',
+  'POST /widget/:publicKey/booking/slots',
+  'POST /widget/:publicKey/booking',
 ]);
 
 describe('deny by default', () => {
