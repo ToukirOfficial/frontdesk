@@ -2,6 +2,9 @@ import { Check } from 'lucide-react';
 import Link from 'next/link';
 import { Logo } from '@/components/logo';
 import { Button } from '@/components/ui/button';
+import { demoKey } from '@/lib/demo';
+
+export const dynamic = 'force-dynamic';
 
 const POINTS = [
   'Answers from your prices, services, opening hours and policies, and shows its sources',
@@ -10,7 +13,8 @@ const POINTS = [
   'Free and open source. Your data stays on your own server.',
 ];
 
-export default function HomePage() {
+export default async function HomePage() {
+  const demo = (await demoKey()) !== null;
   return (
     <div className="mx-auto flex min-h-dvh max-w-3xl flex-col px-4 py-6">
       <header className="flex items-center justify-between">
@@ -40,6 +44,11 @@ export default function HomePage() {
             </li>
           ))}
         </ul>
+        {demo && (
+          <Button asChild size="lg" className="mt-10 w-fit">
+            <Link href="/demo">Try the demo</Link>
+          </Button>
+        )}
       </main>
       <footer className="text-sm text-muted-foreground">AGPL-3.0 · Self-hosted</footer>
     </div>

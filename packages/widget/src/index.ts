@@ -3,7 +3,7 @@ import { io, type Socket } from 'socket.io-client';
 import { MORE_STYLES, STYLES } from './styles.js';
 
 /**
- * <frontdesk-chat key="fd_pk_…"></frontdesk-chat>
+ * <frontdesk-chat key="fd_pk_…"></frontdesk-chat>   (or data-key="…" in React, where `key` is reserved)
  * <script src="https://your-frontdesk.example/widget.js" defer></script>
  *
  * A Web Component with its own Shadow DOM, so the host site's CSS can't break it and its CSS can't leak out.
@@ -91,8 +91,9 @@ class FrontdeskChat extends HTMLElement {
   private token = '';
   private lastVisitorText = '';
 
+  /** `key` in plain HTML; `data-key` where `key` is reserved (React). */
   private get key(): string {
-    return this.getAttribute('key') ?? '';
+    return this.getAttribute('key') ?? this.getAttribute('data-key') ?? '';
   }
   private get api(): string {
     return (this.getAttribute('api') ?? SCRIPT_ORIGIN).replace(/\/+$/, '');
