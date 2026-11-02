@@ -74,5 +74,8 @@ export const MORE_STYLES = `
 .linkish { background: none; border: 0; padding: 0; font: inherit; color: var(--fd-brand); text-decoration: underline; cursor: pointer; }
 .suggest { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px 0; }
 .suggest .chip { text-align: left; }
+/* After the first question: one row that scrolls sideways, so the answer keeps the space. */
+.suggest.compact { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 6px; scrollbar-width: thin; }
+.suggest.compact .chip { flex: 0 0 auto; white-space: nowrap; }
 .field select { font: inherit; padding: 8px; border: 1px solid #d0d5dd; border-radius: 8px; background: #fff; }
 `;
