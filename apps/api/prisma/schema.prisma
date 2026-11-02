@@ -96,6 +96,10 @@ model Workspace {
   publicKey      String   @unique @default(dbgenerated("('fd_pk_'::text || replace((gen_random_uuid())::text, '-'::text, ''::text))")) @map("public_key")
   /// Websites allowed to load the widget (e.g. https://www.example.co.uk). Empty = any.
   allowedOrigins String[] @default([]) @map("allowed_origins")
+  /// Conversations, enquiries and unanswered questions older than this are deleted nightly.
+  retentionDays  Int      @default(90) @map("retention_days")
+  /// AI tokens (input + output) allowed per calendar month; above it the widget switches to leave-a-message.
+  monthlyTokenCap Int     @default(2000000) @map("monthly_token_cap")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
