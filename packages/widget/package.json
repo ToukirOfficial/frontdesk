@@ -1,0 +1,20 @@
+{
+  "name": "@frontdesk/widget",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit -p tsconfig.json && esbuild src/index.ts --bundle --minify --format=iife --target=es2020 --legal-comments=none --outfile=dist/widget.js",
+    "dev": "esbuild src/index.ts --bundle --format=iife --target=es2020 --outfile=dist/widget.js --watch=forever",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "socket.io-client": "^4.8.4"
+  },
+  "devDependencies": {
+    "@frontdesk/shared": "workspace:*",
+    "esbuild": "^0.28.0",
+    "typescript": "6.0.3"
+  }
+}
