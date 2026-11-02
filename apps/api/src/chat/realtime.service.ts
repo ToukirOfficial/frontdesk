@@ -34,6 +34,17 @@ export class RealtimeService {
     this.staff?.to(staffRoom(workspaceId)).emit(event, summary);
   }
 
+  /**
+   * Takes people out of a workspace's live room at once: one user (removed or left) or everyone (workspace deleted).
+   * They can't rejoin, because joining checks membership.
+   */
+  async removeStaff(workspaceId: string, userId?: string): Promise<void> {
+    if (!this.staff) return;
+    for (const s of await this.staff.in(staffRoom(workspaceId)).fetchSockets()) {
+      if (userId === undefined || (s.data as { userId?: string } | undefined)?.userId === userId) s.leave(staffRoom(workspaceId));
+    }
+  }
+
   /** Is anyone from this workspace on the conversations dashboard right now (on any API instance)? */
   async staffOnline(workspaceId: string): Promise<boolean> {
     if (!this.staff) return false;

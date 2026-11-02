@@ -11,6 +11,8 @@ import { PrismaService } from '../prisma/prisma.service.js';
 /** The access token carries only the user id; workspace roles are checked against the database per request. */
 export interface AccessPayload {
   sub: string;
+  /** Set by the JWT library: expiry, in seconds since 1970. */
+  exp?: number;
 }
 
 /** Dashboard and visitor tokens share a signing key, so each carries its audience and is checked for it. */

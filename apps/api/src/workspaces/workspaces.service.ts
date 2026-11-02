@@ -3,10 +3,14 @@ import { type AssignableRole, type Member, type Workspace } from '@frontdesk/sha
 import type { WorkspaceAuth } from '../common/auth.js';
 import { forbidden, notFound } from '../common/errors.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { RealtimeService } from '../chat/realtime.service.js';
 
 @Injectable()
 export class WorkspacesService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(RealtimeService) private readonly realtime: RealtimeService,
+  ) {}
 
   async listForUser(userId: string): Promise<Workspace[]> {
     const rows = await this.prisma.membership.findMany({
@@ -46,6 +50,7 @@ export class WorkspacesService {
   /** Owner only (checked by the guard). Everything in the workspace goes with it (cascade). */
   async remove(auth: WorkspaceAuth): Promise<void> {
     await this.prisma.workspace.delete({ where: { id: auth.workspaceId } });
+    await this.realtime.removeStaff(auth.workspaceId);
   }
 
   async members(auth: WorkspaceAuth): Promise<Member[]> {
@@ -85,6 +90,7 @@ export class WorkspacesService {
     const allowed = self || auth.role === 'owner' || (auth.role === 'admin' && target.role === 'staff');
     if (!allowed) throw forbidden();
     await this.prisma.membership.delete({ where: { id: target.id } });
+    await this.realtime.removeStaff(auth.workspaceId, userId); // stops their live view of chats straight away
   }
 
   private async membership(workspaceId: string, userId: string) {
