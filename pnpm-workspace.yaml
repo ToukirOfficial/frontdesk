@@ -1,0 +1,13 @@
+packages:
+  - apps/*
+  - packages/*
+allowBuilds:
+  '@prisma/engines': true
+  '@swc/core': true
+  argon2: true
+  esbuild: true
+  prisma: true
+  msgpackr-extract: false
+  unrs-resolver: false
+  sharp: false
+  '@scarf/scarf': false
