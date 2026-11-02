@@ -79,7 +79,8 @@ describe('live dashboard sockets', () => {
 
   it('a socket is closed when the login that opened it expires', async () => {
     const owner = await registerOwner(t);
-    const token = await t.app.get(JwtService).signAsync({ sub: owner.userId }, { audience: DASHBOARD_AUDIENCE, expiresIn: 1 });
+    // JWT expiry is in whole seconds: 3 s leaves room to connect on a slow machine before it runs out.
+    const token = await t.app.get(JwtService).signAsync({ sub: owner.userId }, { audience: DASHBOARD_AUDIENCE, expiresIn: 3 });
     const socket = io(`${base}/staff`, {
       path: '/api/socket.io',
       addTrailingSlash: false,
@@ -90,8 +91,8 @@ describe('live dashboard sockets', () => {
     });
     let reason = '';
     socket.on('disconnect', (r) => (reason = r));
-    await until(() => socket.connected);
-    await until(() => reason !== '', 3000);
+    await until(() => socket.connected, 2000);
+    await until(() => reason !== '', 6000);
     expect(reason).toBe('io server disconnect');
   });
 });
