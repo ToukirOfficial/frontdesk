@@ -1,7 +1,7 @@
 'use client';
 
 import type { ChatMessage, ConversationDetail, ConversationList, ConversationSummary } from '@frontdesk/shared';
-import { ArrowLeft, Bot, Hand, Send, User } from 'lucide-react';
+import { ArrowLeft, Bot, Hand, Search, Send, User } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -11,6 +11,7 @@ import { EmptyState, ErrorState, LoadingState } from '@/components/states';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { api, errorMessage } from '@/lib/api';
 import { useStaffSocket } from '@/lib/staff-socket';
@@ -185,16 +186,36 @@ function Conversations() {
   const router = useRouter();
   const params = useSearchParams();
   const selected = params.get('c');
-  const { data, error, loading, reload } = useApi<ConversationList>(`/workspaces/${workspace.id}/conversations`);
+  const [query, setQuery] = useState('');
+  const [search, setSearch] = useState('');
+  const listPath = `/workspaces/${workspace.id}/conversations${search ? `?q=${encodeURIComponent(search)}` : ''}`;
+  const { data, error, loading, reload } = useApi<ConversationList>(listPath);
+  const [older, setOlder] = useState<{ key: string; list: ConversationList } | null>(null);
   const [updates, setUpdates] = useState<Record<string, ConversationSummary>>({});
   const [live, setLive] = useState<Record<string, ChatMessage[]>>({});
 
   // The loaded list, with anything that changed live laid over it, newest activity first.
   const items = useMemo(() => {
-    const byId = new Map((data?.items ?? []).map((c) => [c.id, c]));
-    for (const c of Object.values(updates)) byId.set(c.id, c);
+    const loaded = [...(data?.items ?? []), ...(older?.key === listPath ? older.list.items : [])];
+    const byId = new Map(loaded.map((c) => [c.id, c]));
+    // Live changes: while searching, only update conversations already in the results.
+    for (const c of Object.values(updates)) if (!search || byId.has(c.id)) byId.set(c.id, c);
     return [...byId.values()].sort((a, b) => b.lastMessageAt.localeCompare(a.lastMessageAt));
-  }, [data, updates]);
+  }, [data, older, updates, listPath, search]);
+  const cursor = older?.key === listPath ? older.list.nextCursor : data?.nextCursor;
+  const loadMore = async () => {
+    if (!cursor) return;
+    try {
+      const sep = listPath.includes('?') ? '&' : '?';
+      const next = await api<ConversationList>(`${listPath}${sep}cursor=${cursor}`);
+      setOlder((prev) => ({
+        key: listPath,
+        list: { items: [...(prev?.key === listPath ? prev.list.items : []), ...next.items], nextCursor: next.nextCursor },
+      }));
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  };
 
   const upsert = useCallback((c: ConversationSummary) => setUpdates((prev) => ({ ...prev, [c.id]: c })), []);
 
@@ -222,8 +243,37 @@ function Conversations() {
           <ErrorState error={error} onRetry={reload} />
         ) : (
           <div className="grid h-full md:grid-cols-[320px_1fr]">
-            <div className={cn('min-h-0 overflow-y-auto border-r', selected && 'hidden md:block')}>
-              <List items={items} selected={selected} onSelect={select} />
+            <div className={cn('flex min-h-0 flex-col border-r', selected && 'hidden md:flex')}>
+              <form
+                role="search"
+                className="flex gap-2 border-b p-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  setSearch(query.trim());
+                }}
+              >
+                <label htmlFor="conv-search" className="sr-only">
+                  Search conversations
+                </label>
+                <Input id="conv-search" type="search" placeholder="Search messages…" value={query} onChange={(e) => setQuery(e.target.value)} />
+                <Button type="submit" variant="outline" size="icon" aria-label="Search">
+                  <Search className="size-4" />
+                </Button>
+              </form>
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                {search && items.length === 0 ? (
+                  <EmptyState title="No matches">Nothing in your conversations contains “{search}”.</EmptyState>
+                ) : (
+                  <List items={items} selected={selected} onSelect={select} />
+                )}
+                {cursor && (
+                  <div className="p-3 text-center">
+                    <Button variant="outline" size="sm" onClick={loadMore}>
+                      Load older
+                    </Button>
+                  </div>
+                )}
+              </div>
             </div>
             <div className={cn('min-h-0', !selected && 'hidden md:block')}>
               {selected ? (
