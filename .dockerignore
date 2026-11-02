@@ -1,0 +1,14 @@
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+**/coverage
+**/tmp
+**/storage
+**/*.tsbuildinfo
+apps/api/src/generated
+apps/web/public/widget.js
+.env
+.env.*
+.git
+evals/results

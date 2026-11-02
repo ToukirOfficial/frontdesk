@@ -1,0 +1,379 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Conventions: UUIDv7 ids, createdAt/updatedAt on every table, instants as timestamptz (UTC),
+// snake_case table names. Every workspace-owned row carries workspaceId and every query filters by it.
+
+enum Role {
+  owner
+  admin
+  staff
+}
+
+model User {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  email           String    @unique
+  name            String
+  passwordHash    String    @map("password_hash")
+  emailVerifiedAt DateTime? @map("email_verified_at") @db.Timestamptz(3)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  memberships   Membership[]
+  loginCodes    LoginCode[]
+  refreshTokens RefreshToken[]
+  resetTokens   PasswordResetToken[]
+
+  @@map("users")
+}
+
+/// A 6-digit code emailed after a correct password. Stored as an HMAC, single use, limited attempts.
+model LoginCode {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  codeHash  String    @map("code_hash")
+  attempts  Int       @default(0)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("login_codes")
+}
+
+/// Rotating refresh token. Stored as SHA-256 of its secret. All rotations of one login share familyId;
+/// presenting an already-rotated token revokes the whole family.
+model RefreshToken {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  familyId     String    @map("family_id") @db.Uuid
+  tokenHash    String    @map("token_hash")
+  replacedById String?   @map("replaced_by_id") @db.Uuid
+  expiresAt    DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt    DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+model Workspace {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  name           String
+  isDemo         Boolean  @default(false) @map("is_demo")
+  /// Public id used by the widget's script tag. Not a secret.
+  publicKey      String   @unique @default(dbgenerated("('fd_pk_'::text || replace((gen_random_uuid())::text, '-'::text, ''::text))")) @map("public_key")
+  /// Websites allowed to load the widget (e.g. https://www.example.co.uk). Empty = any.
+  allowedOrigins String[] @default([]) @map("allowed_origins")
+  /// Conversations, enquiries and unanswered questions older than this are deleted nightly.
+  retentionDays  Int      @default(90) @map("retention_days")
+  /// AI tokens (input + output) allowed per calendar month; above it the widget switches to leave-a-message.
+  monthlyTokenCap Int     @default(2000000) @map("monthly_token_cap")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  memberships Membership[]
+  invites     Invite[]
+  business    BusinessProfile?
+  assistant   AssistantSettings?
+  sources     KnowledgeSource[]
+  chunks      KnowledgeChunk[]
+  conversations Conversation[]
+  messages      Message[]
+  unanswered    UnansweredQuestion[]
+  usage         UsageMonth[]
+  enquiries     Enquiry[]
+
+  @@map("workspaces")
+}
+
+model Membership {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  role        Role
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+  @@map("memberships")
+}
+
+model Invite {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  email       String
+  role        Role
+  tokenHash   String    @unique @map("token_hash")
+  invitedById String?   @map("invited_by_id") @db.Uuid
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(3)
+  acceptedAt  DateTime? @map("accepted_at") @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([email])
+  @@map("invites")
+}
+
+enum Preset {
+  general
+  law
+  clinic
+}
+
+enum SourceType {
+  faq
+  text
+  file
+  url
+}
+
+enum SourceStatus {
+  processing
+  ready
+  failed
+}
+
+/// Structured business details. Always given to the assistant, as reference data.
+model BusinessProfile {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  workspaceId  String   @unique @map("workspace_id") @db.Uuid
+  name         String   @default("")
+  address      String   @default("")
+  /// { mon: { closed, open, close }, … , notes }
+  openingHours Json     @map("opening_hours")
+  email        String   @default("")
+  phone        String   @default("")
+  bookingUrl   String   @default("") @map("booking_url")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@map("business_profiles")
+}
+
+model AssistantSettings {
+  id                String   @id @default(uuid(7)) @db.Uuid
+  workspaceId       String   @unique @map("workspace_id") @db.Uuid
+  preset            Preset   @default(general)
+  rules             String   @default("")
+  slotwiseBaseUrl   String?  @map("slotwise_base_url")
+  /// AES-256-GCM sealed API key. Never returned by the API.
+  slotwiseKeyCipher String?  @map("slotwise_key_cipher")
+  greeting          String   @default("Hello! How can I help you today?")
+  brandColour       String   @default("#0f766e") @map("brand_colour")
+  position          String   @default("right")
+  /// Stored avatar image name inside STORAGE_DIR/avatars
+  avatarName        String?  @map("avatar_name")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@map("assistant_settings")
+}
+
+model KnowledgeSource {
+  id          String       @id @default(uuid(7)) @db.Uuid
+  workspaceId String       @map("workspace_id") @db.Uuid
+  type        SourceType
+  title       String
+  /// FAQ question (type faq)
+  question    String?
+  /// Plain text (text) or FAQ answer (faq)
+  content     String?
+  /// Stored file name inside STORAGE_DIR (file); never a user-supplied path
+  storedName  String?      @map("stored_name")
+  mimeType    String?      @map("mime_type")
+  sizeBytes   Int?         @map("size_bytes")
+  /// Start URL (url)
+  url         String?
+  /// Page limit for a website import (url)
+  maxPages    Int?         @map("max_pages")
+  status      SourceStatus @default(processing)
+  error       String?
+  chunkCount  Int          @default(0) @map("chunk_count")
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  chunks    KnowledgeChunk[]
+
+  @@index([workspaceId, createdAt])
+  @@map("knowledge_sources")
+}
+
+/// One embedded piece of knowledge. workspaceId is copied here so every vector search filters on it directly.
+model KnowledgeChunk {
+  id          String                       @id @default(uuid(7)) @db.Uuid
+  workspaceId String                       @map("workspace_id") @db.Uuid
+  sourceId    String                       @map("source_id") @db.Uuid
+  position    Int
+  content     String
+  /// Page URL for imported websites
+  pageUrl     String?                      @map("page_url")
+  embedding   Unsupported("vector(384)")
+  createdAt   DateTime                     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  source    KnowledgeSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([sourceId])
+  @@map("knowledge_chunks")
+}
+
+enum ConversationMode {
+  ai
+  human
+  closed
+}
+
+enum MessageRole {
+  visitor
+  assistant
+  staff
+  system
+}
+
+model Conversation {
+  id             String           @id @default(uuid(7)) @db.Uuid
+  workspaceId    String           @map("workspace_id") @db.Uuid
+  visitorId      String           @map("visitor_id")
+  mode           ConversationMode @default(ai)
+  assignedUserId String?          @map("assigned_user_id") @db.Uuid
+  /// Set when the visitor asks for a person and staff are online; cleared on takeover.
+  handoverRequestedAt DateTime?   @map("handover_requested_at") @db.Timestamptz(3)
+  lastMessageAt  DateTime         @default(now()) @map("last_message_at") @db.Timestamptz(3)
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace  Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  messages   Message[]
+  unanswered UnansweredQuestion[]
+  enquiries  Enquiry[]
+
+  @@index([workspaceId, lastMessageAt])
+  @@map("conversations")
+}
+
+model Message {
+  id             String      @id @default(uuid(7)) @db.Uuid
+  conversationId String      @map("conversation_id") @db.Uuid
+  workspaceId    String      @map("workspace_id") @db.Uuid
+  role           MessageRole
+  content        String
+  /// [{ title, url }] for assistant answers
+  sources        Json?
+  /// Display name for staff messages
+  authorName     String?     @map("author_name")
+  inputTokens    Int         @default(0) @map("input_tokens")
+  outputTokens   Int         @default(0) @map("output_tokens")
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@index([workspaceId, createdAt])
+  @@map("messages")
+}
+
+/// A visitor question the assistant couldn't answer from the knowledge (reported by the model as a tool call).
+model UnansweredQuestion {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  workspaceId    String    @map("workspace_id") @db.Uuid
+  conversationId String?   @map("conversation_id") @db.Uuid
+  question       String
+  resolvedAt     DateTime? @map("resolved_at") @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([conversationId])
+  @@map("unanswered_questions")
+}
+
+/// AI tokens used per workspace per calendar month (UTC), for the spend cap.
+model UsageMonth {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  workspaceId  String   @map("workspace_id") @db.Uuid
+  month        String
+  inputTokens  Int      @default(0) @map("input_tokens")
+  outputTokens Int      @default(0) @map("output_tokens")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, month])
+  @@map("usage_months")
+}
+
+/// A message left by a visitor in the chat, emailed to the business.
+model Enquiry {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  workspaceId    String    @map("workspace_id") @db.Uuid
+  conversationId String?   @map("conversation_id") @db.Uuid
+  name           String
+  email          String?
+  phone          String?
+  need           String
+  /// The consent wording the visitor agreed to, and when
+  consentText    String    @map("consent_text")
+  consentAt      DateTime  @map("consent_at") @db.Timestamptz(3)
+  emailedAt      DateTime? @map("emailed_at") @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([conversationId])
+  @@map("enquiries")
+}

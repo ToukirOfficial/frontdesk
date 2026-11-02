@@ -1,0 +1,105 @@
+# Self-hosting: `docker compose up` runs everything (web, API, worker, PostgreSQL with pgvector, Redis).
+# Fill in .env first (copy .env.example): at least JWT_SECRET, CODE_SECRET, ENCRYPTION_KEY, an AI key, WEB_URL.
+# Local development uses only the databases: `docker compose up -d postgres redis`.
+name: frontdesk
+
+x-app-env: &app-env
+  NODE_ENV: production
+  DATABASE_URL: postgresql://frontdesk:${POSTGRES_PASSWORD:-frontdesk}@postgres:5432/frontdesk
+  REDIS_URL: redis://redis:6379/7
+  REDIS_PREFIX: frontdesk
+  WEB_URL: ${WEB_URL:-http://localhost:8025}
+  JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+  CODE_SECRET: ${CODE_SECRET:?Set CODE_SECRET in .env}
+  ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in .env}
+  SMTP_URL: ${SMTP_URL:-}
+  MAIL_FROM: ${MAIL_FROM:-Frontdesk <no-reply@frontdesk.example>}
+  AI_PROVIDER: ${AI_PROVIDER:-anthropic}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-opus-5-5}
+  ANTHROPIC_EFFORT: ${ANTHROPIC_EFFORT:-low}
+  ANTHROPIC_FALLBACKS: ${ANTHROPIC_FALLBACKS:-default}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-4.1-mini}
+  EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
+  STORAGE_DIR: /app/apps/api/storage
+  MODEL_CACHE_DIR: /app/apps/api/storage/models
+  DEMO_MODE: ${DEMO_MODE:-false}
+  DEMO_MONTHLY_TOKEN_CAP: ${DEMO_MONTHLY_TOKEN_CAP:-300000}
+  # The web container (on the private docker network) forwards visitors' IPs.
+  TRUST_PROXY: private
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg18
+    environment:
+      POSTGRES_USER: frontdesk
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-frontdesk}
+      POSTGRES_DB: frontdesk
+    ports: ['127.0.0.1:5432:5432']
+    volumes:
+      - postgres:/var/lib/postgresql
+      - ./docker/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U frontdesk']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports: ['127.0.0.1:6379:6379']
+    volumes:
+      - redis:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    build: { context: ., dockerfile: apps/api/Dockerfile }
+    image: frontdesk-api
+    environment: *app-env
+    volumes:
+      - storage:/app/apps/api/storage
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:8125/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    restart: unless-stopped
+
+  worker:
+    image: frontdesk-api
+    command: ['node', 'dist/worker.js']
+    environment: *app-env
+    volumes:
+      - storage:/app/apps/api/storage
+    depends_on:
+      api: { condition: service_healthy }
+    restart: unless-stopped
+
+  web:
+    image: frontdesk-web
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args: { API_URL: 'http://api:8125' }
+    environment:
+      API_URL: http://api:8125
+    ports: ['8025:8025']
+    depends_on:
+      api: { condition: service_healthy }
+    restart: unless-stopped
+
+volumes:
+  postgres:
+  redis:
+  storage:
