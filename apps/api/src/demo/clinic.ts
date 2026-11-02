@@ -9,7 +9,7 @@ export const DEMO_BUSINESS: BusinessProfile = {
   address: '12 Example Lane, Exampleton, EX1 2PL',
   email: 'hello@riverside-physio.example',
   phone: '01632 960 123',
-  bookingUrl: 'https://booking.riverside-physio.example',
+  bookingUrl: '', // no Book button in the demo: there's nowhere real to book
   openingHours: {
     mon: { closed: false, open: '08:00', close: '19:00' },
     tue: { closed: false, open: '08:00', close: '19:00' },
