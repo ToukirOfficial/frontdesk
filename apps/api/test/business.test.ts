@@ -62,10 +62,11 @@ describe('business details and assistant settings', () => {
     const res = await as(t, owner)
       .put(A, { preset: 'law', rules: 'Never give legal advice; offer a consultation instead.' })
       .expect(200);
-    expect(res.body).toEqual({
+    expect(res.body).toMatchObject({
       preset: 'law',
       rules: 'Never give legal advice; offer a consultation instead.',
       slotwise: { connected: false, baseUrl: null },
+      widget: { publicKey: expect.stringMatching(/^fd_pk_[0-9a-f]{32}$/), hasAvatar: false, allowedOrigins: [] },
     });
   });
 });

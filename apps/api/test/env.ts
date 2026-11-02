@@ -10,3 +10,4 @@ process.env.DEMO_MODE = 'false';
 process.env.EMBEDDING_PROVIDER = 'fake';
 process.env.STORAGE_DIR = `${process.cwd()}/tmp/test-storage`;
 process.env.ALLOW_PRIVATE_URLS = 'false';
+process.env.AI_PROVIDER = 'fake';

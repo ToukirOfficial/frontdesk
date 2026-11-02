@@ -25,6 +25,10 @@ const PUBLIC_ROUTES = new Set([
   'GET /invites/:token',
   'POST /invites/accept',
   'GET /health',
+  // The widget, on customers' websites. Checked against the workspace's allowed sites and rate-limited.
+  'GET /widget/:publicKey/config',
+  'POST /widget/:publicKey/session',
+  'GET /widget/:publicKey/avatar',
 ]);
 
 describe('deny by default', () => {
