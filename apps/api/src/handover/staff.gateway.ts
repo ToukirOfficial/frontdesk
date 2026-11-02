@@ -49,6 +49,10 @@ export class StaffGateway implements OnGatewayInit, OnGatewayConnection {
       if (!token) throw new Error('no cookie');
       const payload = await this.jwt.verifyAsync<AccessPayload>(token, { audience: DASHBOARD_AUDIENCE });
       socket.data = { userId: payload.sub, workspaceId: null as string | null };
+      // A socket lives no longer than the login that opened it; the dashboard refreshes and reconnects.
+      const left = payload.exp ? payload.exp * 1000 - Date.now() : 0;
+      const timer = setTimeout(() => socket.disconnect(true), Math.max(0, left));
+      socket.once('disconnect', () => clearTimeout(timer));
     } catch {
       socket.disconnect(true);
     }

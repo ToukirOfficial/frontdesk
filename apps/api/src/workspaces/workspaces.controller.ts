@@ -20,6 +20,7 @@ import {
 } from '@frontdesk/shared';
 import { AnyMember, Auth, LoggedIn, Member as CurrentMember, Roles, type UserAuth, type WorkspaceAuth } from '../common/auth.js';
 import { AppError } from '../common/errors.js';
+import { RateLimiter } from '../common/rate-limit.js';
 import { Returns } from '../common/schema.js';
 import { APP_CONFIG, type AppConfig } from '../config.js';
 import { WorkspacesService } from './workspaces.service.js';
@@ -31,6 +32,7 @@ export class WorkspacesController {
   constructor(
     @Inject(WorkspacesService) private readonly workspaces: WorkspacesService,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
+    @Inject(RateLimiter) private readonly limiter: RateLimiter,
   ) {}
 
   @LoggedIn()
@@ -43,8 +45,9 @@ export class WorkspacesController {
   @LoggedIn()
   @Post()
   @Returns(workspaceSchema, 201)
-  create(@Auth() auth: UserAuth, @Body({ schema: createWorkspaceBodySchema }) body: WorkspaceBody): Promise<Workspace> {
+  async create(@Auth() auth: UserAuth, @Body({ schema: createWorkspaceBodySchema }) body: WorkspaceBody): Promise<Workspace> {
     if (this.config.DEMO_MODE) throw new AppError(403, ErrorCode.DEMO_MODE, 'This is a public demo, so new workspaces are switched off.');
+    await this.limiter.hit(`workspace-create:user:${auth.userId}`, 10, 24 * 60 * 60, 'You’ve created several workspaces today. Try again tomorrow.');
     return this.workspaces.create(auth.userId, body.name);
   }
 

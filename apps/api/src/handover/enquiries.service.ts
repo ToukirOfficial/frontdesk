@@ -55,14 +55,19 @@ export class EnquiriesService {
     await this.conversations.broadcast(info.workspaceId, conversation.id);
   }
 
-  /** The business's contact email if set, otherwise the workspace owners. */
+  /**
+   * Owners and admins, whose addresses are proven by every login (each login needs an emailed code). The business
+   * contact email is used too, but only when it belongs to a member: an address typed into the dashboard is never
+   * mailed on its own, or anyone could sign up and use this server to send messages to strangers.
+   */
   private async recipients(workspaceId: string): Promise<string[]> {
-    const business = await this.prisma.businessProfile.findUnique({ where: { workspaceId }, select: { email: true } });
-    if (business?.email) return [business.email];
-    const owners = await this.prisma.membership.findMany({
-      where: { workspaceId, role: 'owner' },
-      include: { user: { select: { email: true } } },
-    });
-    return owners.map((o) => o.user.email);
+    const [business, members] = await Promise.all([
+      this.prisma.businessProfile.findUnique({ where: { workspaceId }, select: { email: true } }),
+      this.prisma.membership.findMany({ where: { workspaceId }, select: { role: true, user: { select: { email: true } } } }),
+    ]);
+    const to = new Set(members.filter((m) => m.role === 'owner' || m.role === 'admin').map((m) => m.user.email));
+    const contact = business?.email?.toLowerCase();
+    if (contact && members.some((m) => m.user.email === contact)) to.add(contact);
+    return [...to];
   }
 }

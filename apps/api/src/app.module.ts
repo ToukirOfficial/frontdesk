@@ -17,7 +17,6 @@ import { AssistantService } from './chat/assistant.service.js';
 import { VisitorGateway } from './chat/visitor.gateway.js';
 import { WidgetController } from './chat/widget.controller.js';
 import { WidgetService } from './chat/widget.service.js';
-import { RealtimeService } from './chat/realtime.service.js';
 import { BookingService } from './booking/booking.service.js';
 import { ConversationsController } from './handover/conversations.controller.js';
 import { ConversationsService } from './handover/conversations.service.js';
@@ -64,7 +63,6 @@ class KnowledgeModule {}
   providers: [
     UsageService,
     WidgetService,
-    RealtimeService,
     ConversationsService,
     EnquiriesService,
     BookingService,
