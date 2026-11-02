@@ -3,6 +3,7 @@ import {
   ConnectedSocket,
   MessageBody,
   type OnGatewayConnection,
+  type OnGatewayInit,
   SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
@@ -13,7 +14,9 @@ import { Public } from '../common/auth.js';
 import { RateLimiter } from '../common/rate-limit.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { RedisService } from '../redis/redis.service.js';
+import { ConversationsService } from '../handover/conversations.service.js';
 import { AssistantService } from './assistant.service.js';
+import { conversationRoom, RealtimeService } from './realtime.service.js';
 import { clientIp } from './client-ip.js';
 import { toChatMessage, WidgetService } from './widget.service.js';
 
@@ -26,15 +29,13 @@ interface VisitorData {
 
 type VisitorSocket = Socket<Record<string, never>, VisitorServerEvents, Record<string, never>, VisitorData>;
 
-export const conversationRoom = (conversationId: string) => `conv:${conversationId}`;
-
 /**
  * The visitor's side of a chat. A socket authenticates once, on connect, with the visitor token from
  * POST /api/widget/:key/session, and can only ever join that token's conversation.
  */
 @Public() // authenticated per socket in handleConnection, with the visitor token
 @WebSocketGateway({ namespace: '/visitor' })
-export class VisitorGateway implements OnGatewayConnection {
+export class VisitorGateway implements OnGatewayInit, OnGatewayConnection {
   private readonly log = new Logger('VisitorGateway');
   @WebSocketServer() private readonly ns!: Namespace;
 
@@ -44,7 +45,13 @@ export class VisitorGateway implements OnGatewayConnection {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(RedisService) private readonly redis: RedisService,
     @Inject(RateLimiter) private readonly limiter: RateLimiter,
+    @Inject(RealtimeService) private readonly realtime: RealtimeService,
+    @Inject(ConversationsService) private readonly conversations: ConversationsService,
   ) {}
+
+  afterInit(ns: Namespace): void {
+    this.realtime.setVisitorNamespace(ns);
+  }
 
   async handleConnection(socket: VisitorSocket): Promise<void> {
     try {
@@ -96,9 +103,13 @@ export class VisitorGateway implements OnGatewayConnection {
         data: { conversationId: conversation.id, workspaceId: data.workspaceId, role: 'visitor', content: parsed.data.text },
       });
       await this.prisma.conversation.update({ where: { id: conversation.id }, data: { lastMessageAt: new Date() } });
-      this.ns.to(conversationRoom(conversation.id)).emit('message', toChatMessage(visitorMsg));
+      const dto = toChatMessage(visitorMsg);
+      this.realtime.toVisitor(conversation.id, 'message', dto);
+      this.realtime.staffMessage(data.workspaceId, conversation.id, dto);
 
+      // While a person has the chat, the assistant stays quiet.
       if (conversation.mode === 'ai') await this.answer(data, parsed.data.text);
+      await this.conversations.broadcast(data.workspaceId, conversation.id);
       return { ok: true };
     } finally {
       await this.redis.client.del(lock);
@@ -126,7 +137,37 @@ export class VisitorGateway implements OnGatewayConnection {
     // Only one reply runs per conversation, so the widget swaps its pending bubble for this final message.
     const msg: ChatMessage = toChatMessage(saved);
     room.emit('reply:end', msg);
+    this.realtime.staffMessage(data.workspaceId, data.conversationId, msg);
     if (result.failed) this.log.warn(`Reply fallback used in conversation ${data.conversationId}`);
+  }
+
+  /**
+   * "Talk to a person". If someone from the team is on the dashboard, they're alerted; if not, the visitor is asked
+   * to leave a message instead.
+   */
+  @SubscribeMessage('handover')
+  async onHandover(@ConnectedSocket() socket: VisitorSocket): Promise<{ ok: boolean; available?: boolean; error?: string }> {
+    const data = socket.data as VisitorData | undefined;
+    if (!data?.conversationId) return { ok: false, error: 'Not connected.' };
+    const wait = await this.limiter.check(`handover:visitor:${data.visitorId}`, 3, 10 * 60);
+    if (wait !== null) return { ok: false, error: 'You’ve already asked. Someone will be with you soon.' };
+    const conversation = await this.prisma.conversation.findFirst({ where: { id: data.conversationId, workspaceId: data.workspaceId } });
+    if (!conversation) return { ok: false, error: 'Not connected.' };
+    if (conversation.mode === 'human') return { ok: true, available: true };
+
+    if (await this.realtime.staffOnline(data.workspaceId)) {
+      await this.prisma.conversation.update({ where: { id: conversation.id }, data: { handoverRequestedAt: new Date() } });
+      await this.conversations.system(data.workspaceId, conversation.id, 'We’ve asked a member of the team to join. Please wait a moment.');
+      await this.conversations.broadcast(data.workspaceId, conversation.id, 'handover:requested');
+      return { ok: true, available: true };
+    }
+    await this.conversations.system(
+      data.workspaceId,
+      conversation.id,
+      'No one from the team is available right now. Leave a message and they’ll get back to you.',
+    );
+    this.realtime.toVisitor(conversation.id, 'handover:unavailable');
+    return { ok: true, available: false };
   }
 
   /** Per visitor, per IP and per workspace. Returns a message if any limit is hit. */

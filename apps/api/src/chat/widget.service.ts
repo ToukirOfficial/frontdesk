@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { type ChatMessage, ErrorCode, type SourceRef, sourceRefSchema, type WidgetConfig } from '@frontdesk/shared';
+import { type ChatMessage, consentText, ErrorCode, type SourceRef, sourceRefSchema, type WidgetConfig } from '@frontdesk/shared';
 import { z } from 'zod';
 import { VISITOR_AUDIENCE } from '../auth/sessions.service.js';
 import { AppError, notFound } from '../common/errors.js';
@@ -21,6 +21,8 @@ export interface WidgetInfo {
   position: 'left' | 'right';
   hasAvatar: boolean;
   allowedOrigins: string[];
+  booking: 'slotwise' | 'link' | 'none';
+  bookingUrl: string | null;
 }
 
 export interface VisitorClaims {
@@ -58,7 +60,7 @@ export class WidgetService {
     if (cached) return cached;
     const ws = await this.prisma.workspace.findUnique({
       where: { publicKey },
-      include: { business: { select: { name: true } }, assistant: true },
+      include: { business: { select: { name: true, bookingUrl: true } }, assistant: true },
     });
     if (!ws) throw notFound('Unknown widget key.');
     const info: WidgetInfo = {
@@ -70,6 +72,8 @@ export class WidgetService {
       position: ws.assistant?.position === 'left' ? 'left' : 'right',
       hasAvatar: Boolean(ws.assistant?.avatarName),
       allowedOrigins: ws.allowedOrigins,
+      booking: ws.assistant?.slotwiseKeyCipher ? 'slotwise' : ws.business?.bookingUrl ? 'link' : 'none',
+      bookingUrl: ws.business?.bookingUrl || null,
     };
     await this.redis.setJson(widgetCacheKey(publicKey), info, 60);
     return info;
@@ -95,6 +99,9 @@ export class WidgetService {
       position: info.position,
       avatarUrl: info.hasAvatar ? `/api/widget/${info.publicKey}/avatar` : null,
       mode,
+      booking: info.booking,
+      bookingUrl: info.bookingUrl,
+      consentText: consentText(info.name),
     };
   }
 

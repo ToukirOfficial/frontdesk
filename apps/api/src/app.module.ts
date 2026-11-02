@@ -17,6 +17,12 @@ import { AssistantService } from './chat/assistant.service.js';
 import { VisitorGateway } from './chat/visitor.gateway.js';
 import { WidgetController } from './chat/widget.controller.js';
 import { WidgetService } from './chat/widget.service.js';
+import { RealtimeService } from './chat/realtime.service.js';
+import { BookingService } from './booking/booking.service.js';
+import { ConversationsController } from './handover/conversations.controller.js';
+import { ConversationsService } from './handover/conversations.service.js';
+import { EnquiriesService } from './handover/enquiries.service.js';
+import { StaffGateway } from './handover/staff.gateway.js';
 import { APP_CONFIG } from './config.js';
 import { VectorStore } from './knowledge/vector-store.js';
 import { HealthController } from './health/health.controller.js';
@@ -46,9 +52,14 @@ class BusinessModule {}
 class KnowledgeModule {}
 
 @Module({
-  controllers: [WidgetController],
+  controllers: [WidgetController, ConversationsController],
   providers: [
     WidgetService,
+    RealtimeService,
+    ConversationsService,
+    EnquiriesService,
+    BookingService,
+    StaffGateway,
     AssistantService,
     VisitorGateway,
     VectorStore,

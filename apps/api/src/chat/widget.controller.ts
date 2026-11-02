@@ -1,6 +1,17 @@
 import { createReadStream } from 'node:fs';
 import { Body, Controller, Get, Inject, Param, Post, Req, Res, StreamableFile } from '@nestjs/common';
 import {
+  type BookBody,
+  bookBodySchema,
+  bookingServicesSchema,
+  bookResultSchema,
+  type EnquiryBody,
+  enquiryBodySchema,
+  okSchema,
+  slotsQuerySchema,
+  slotsSchema,
+  type Slots,
+  visitorTokenBodySchema,
   publicKeyParamsSchema,
   type WidgetConfig,
   widgetConfigSchema,
@@ -15,6 +26,8 @@ import { RateLimiter } from '../common/rate-limit.js';
 import { Returns } from '../common/schema.js';
 import { APP_CONFIG, type AppConfig } from '../config.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { BookingService } from '../booking/booking.service.js';
+import { EnquiriesService } from '../handover/enquiries.service.js';
 import { avatarPath } from './avatars.js';
 import { WidgetService } from './widget.service.js';
 
@@ -30,7 +43,65 @@ export class WidgetController {
     @Inject(RateLimiter) private readonly limiter: RateLimiter,
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
+    @Inject(EnquiriesService) private readonly enquiries: EnquiriesService,
+    @Inject(BookingService) private readonly booking: BookingService,
   ) {}
+
+  /** Leave a message. Works even when the assistant is switched off (e.g. the monthly cap is reached). */
+  @Post('enquiry')
+  @Returns(okSchema, 201)
+  async enquiry(
+    @Param({ schema: publicKeyParamsSchema }) p: { publicKey: string },
+    @Body({ schema: enquiryBodySchema }) body: EnquiryBody,
+    @Req() req: Request,
+  ) {
+    await this.limiter.hit(`enquiry:ip:${req.ip}`, 5, 60 * 60, 'You’ve sent several messages already. Please try again later.');
+    const info = await this.widgets.byKey(p.publicKey);
+    this.widgets.checkOrigin(info, req.get('origin'));
+    await this.limiter.hit(`enquiry:ws:${info.workspaceId}`, 100, 60 * 60);
+    await this.enquiries.create(info, body);
+    return { ok: true } as const;
+  }
+
+  /** POST so the visitor token stays out of URLs and logs. */
+  @Post('booking/services')
+  @Returns(bookingServicesSchema)
+  async services(
+    @Param({ schema: publicKeyParamsSchema }) p: { publicKey: string },
+    @Body({ schema: visitorTokenBodySchema }) body: { token: string },
+    @Req() req: Request,
+  ) {
+    await this.limiter.hit(`booking-read:ip:${req.ip}`, 30, 60);
+    const info = await this.widgets.byKey(p.publicKey);
+    this.widgets.checkOrigin(info, req.get('origin'));
+    return this.booking.services(info, body.token);
+  }
+
+  @Post('booking/slots')
+  @Returns(slotsSchema)
+  async slots(
+    @Param({ schema: publicKeyParamsSchema }) p: { publicKey: string },
+    @Body({ schema: slotsQuerySchema }) body: { token: string; serviceId: string; from: string; to: string },
+    @Req() req: Request,
+  ): Promise<Slots> {
+    await this.limiter.hit(`booking-read:ip:${req.ip}`, 30, 60);
+    const info = await this.widgets.byKey(p.publicKey);
+    this.widgets.checkOrigin(info, req.get('origin'));
+    return this.booking.slots(info, body);
+  }
+
+  @Post('booking')
+  @Returns(bookResultSchema, 201)
+  async book(
+    @Param({ schema: publicKeyParamsSchema }) p: { publicKey: string },
+    @Body({ schema: bookBodySchema }) body: BookBody,
+    @Req() req: Request,
+  ) {
+    await this.limiter.hit(`booking:ip:${req.ip}`, 5, 60 * 60, 'You’ve made several bookings already. Please contact the business directly.');
+    const info = await this.widgets.byKey(p.publicKey);
+    this.widgets.checkOrigin(info, req.get('origin'));
+    return this.booking.book(info, body);
+  }
 
   @Get('config')
   @Returns(widgetConfigSchema)

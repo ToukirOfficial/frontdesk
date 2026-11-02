@@ -3,7 +3,8 @@ import type { AppConfig } from '../config.js';
 export type MailTemplate =
   | { kind: 'login_code'; code: string }
   | { kind: 'password_reset'; token: string }
-  | { kind: 'invite'; token: string; workspaceName: string; role: string };
+  | { kind: 'invite'; token: string; workspaceName: string; role: string }
+  | { kind: 'enquiry'; workspaceName: string; workspaceId: string; name: string; email: string; phone: string; need: string };
 
 /** Plain-text emails in UK English. */
 export const render = (t: MailTemplate, config: AppConfig): { subject: string; text: string } => {
@@ -38,6 +39,24 @@ export const render = (t: MailTemplate, config: AppConfig): { subject: string; t
           `Accept the invite: ${config.WEB_URL}/invite/${t.token}`,
           '',
           'The link expires in 7 days.',
+        ].join('\n'),
+      };
+      case 'enquiry':
+      return {
+        subject: `New enquiry from your website: ${t.name}`,
+        text: [
+          `Someone left a message in the chat on your website (${t.workspaceName}).`,
+          '',
+          `Name: ${t.name}`,
+          `Email: ${t.email || 'not given'}`,
+          `Phone: ${t.phone || 'not given'}`,
+          '',
+          'What they need:',
+          t.need,
+          '',
+          `See all enquiries: ${config.WEB_URL}/w/${t.workspaceId}/enquiries`,
+          '',
+          'They agreed to you storing these details to reply to them, and for nothing else.',
         ].join('\n'),
       };
   }

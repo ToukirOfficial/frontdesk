@@ -41,6 +41,9 @@ export class RedisIoAdapter extends IoAdapter {
 
   override async close(server: Server): Promise<void> {
     await super.close(server);
+    // Redis answers commands in order: once a PING returns, the adapter's (un)subscribe calls have finished, so
+    // quitting can't reject them. Matters when an app stops right after starting (tests, quick restarts).
+    await Promise.all([this.pub.ping().catch(() => undefined), this.sub.ping().catch(() => undefined)]);
     await Promise.all([this.pub.quit().catch(() => undefined), this.sub.quit().catch(() => undefined)]);
   }
 }
