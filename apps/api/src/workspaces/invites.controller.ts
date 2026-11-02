@@ -19,6 +19,7 @@ import {
 import type { Request, Response } from 'express';
 import { Member, Public, Roles, type WorkspaceAuth } from '../common/auth.js';
 import { setAuthCookies } from '../common/cookies.js';
+import { sha256 } from '../common/crypto.js';
 import { RateLimiter } from '../common/rate-limit.js';
 import { Returns } from '../common/schema.js';
 import { SessionsService } from '../auth/sessions.service.js';
@@ -47,7 +48,10 @@ export class InvitesController {
     @Member() auth: WorkspaceAuth,
     @Body({ schema: createInviteBodySchema }) body: CreateInviteBody,
   ): Promise<Invite> {
+    // Invites email any address, so they're limited per workspace, per person sending, and per recipient.
     await this.limiter.hit(`invite:ws:${auth.workspaceId}`, 30, 60 * 60);
+    await this.limiter.hit(`invite:user:${auth.userId}`, 50, 24 * 60 * 60, 'You’ve sent a lot of invites today. Try again tomorrow.');
+    await this.limiter.hit(`invite:to:${sha256(body.email)}`, 3, 24 * 60 * 60, 'This person has been invited several times today. Try again tomorrow.');
     return this.invites.create(auth, body);
   }
 

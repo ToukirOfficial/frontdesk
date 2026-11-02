@@ -20,10 +20,12 @@ export class MailQueue {
   ) {}
 
   async send(to: string, template: MailTemplate): Promise<void> {
-    const { subject, text } = render(template, this.config);
+    const rendered = render(template, this.config);
+    // Subjects carry names typed by visitors and admins: one line only, so nothing can pose as an extra mail header.
+    const subject = rendered.subject.replace(/[\r\n\t]+/g, ' ').slice(0, 200);
     await this.queue.add(
       'send',
-      { to, subject, text },
+      { to, subject, text: rendered.text },
       {
         attempts: 5,
         backoff: { type: 'exponential', delay: 5_000 },
