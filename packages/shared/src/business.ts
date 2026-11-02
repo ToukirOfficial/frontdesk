@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { widgetSettingsSchema } from './chat.js';
 import { instantSchema } from './common.js';
 
 export const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
@@ -63,6 +64,7 @@ export type AssistantSettingsBody = z.infer<typeof assistantSettingsBodySchema>;
 
 export const assistantSettingsSchema = assistantSettingsBodySchema.extend({
   slotwise: z.object({ connected: z.boolean(), baseUrl: z.string().nullable() }),
+  widget: widgetSettingsSchema,
 });
 export type AssistantSettings = z.infer<typeof assistantSettingsSchema>;
 
