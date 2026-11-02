@@ -89,9 +89,13 @@ model PasswordResetToken {
 }
 
 model Workspace {
-  id        String   @id @default(uuid(7)) @db.Uuid
-  name      String
-  isDemo    Boolean  @default(false) @map("is_demo")
+  id             String   @id @default(uuid(7)) @db.Uuid
+  name           String
+  isDemo         Boolean  @default(false) @map("is_demo")
+  /// Public id used by the widget's script tag. Not a secret.
+  publicKey      String   @unique @default(dbgenerated("('fd_pk_'::text || replace((gen_random_uuid())::text, '-'::text, ''::text))")) @map("public_key")
+  /// Websites allowed to load the widget (e.g. https://www.example.co.uk). Empty = any.
+  allowedOrigins String[] @default([]) @map("allowed_origins")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -101,6 +105,10 @@ model Workspace {
   assistant   AssistantSettings?
   sources     KnowledgeSource[]
   chunks      KnowledgeChunk[]
+  conversations Conversation[]
+  messages      Message[]
+  unanswered    UnansweredQuestion[]
+  usage         UsageMonth[]
 
   @@map("workspaces")
 }
@@ -186,6 +194,11 @@ model AssistantSettings {
   slotwiseBaseUrl   String?  @map("slotwise_base_url")
   /// AES-256-GCM sealed API key. Never returned by the API.
   slotwiseKeyCipher String?  @map("slotwise_key_cipher")
+  greeting          String   @default("Hello! How can I help you today?")
+  brandColour       String   @default("#0f766e") @map("brand_colour")
+  position          String   @default("right")
+  /// Stored avatar image name inside STORAGE_DIR/avatars
+  avatarName        String?  @map("avatar_name")
   createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -243,4 +256,92 @@ model KnowledgeChunk {
   @@index([workspaceId])
   @@index([sourceId])
   @@map("knowledge_chunks")
+}
+
+enum ConversationMode {
+  ai
+  human
+  closed
+}
+
+enum MessageRole {
+  visitor
+  assistant
+  staff
+  system
+}
+
+model Conversation {
+  id             String           @id @default(uuid(7)) @db.Uuid
+  workspaceId    String           @map("workspace_id") @db.Uuid
+  visitorId      String           @map("visitor_id")
+  mode           ConversationMode @default(ai)
+  assignedUserId String?          @map("assigned_user_id") @db.Uuid
+  lastMessageAt  DateTime         @default(now()) @map("last_message_at") @db.Timestamptz(3)
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace  Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  messages   Message[]
+  unanswered UnansweredQuestion[]
+
+  @@index([workspaceId, lastMessageAt])
+  @@map("conversations")
+}
+
+model Message {
+  id             String      @id @default(uuid(7)) @db.Uuid
+  conversationId String      @map("conversation_id") @db.Uuid
+  workspaceId    String      @map("workspace_id") @db.Uuid
+  role           MessageRole
+  content        String
+  /// [{ title, url }] for assistant answers
+  sources        Json?
+  /// Display name for staff messages
+  authorName     String?     @map("author_name")
+  inputTokens    Int         @default(0) @map("input_tokens")
+  outputTokens   Int         @default(0) @map("output_tokens")
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@index([workspaceId, createdAt])
+  @@map("messages")
+}
+
+/// A visitor question the assistant couldn't answer from the knowledge (reported by the model as a tool call).
+model UnansweredQuestion {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  workspaceId    String    @map("workspace_id") @db.Uuid
+  conversationId String?   @map("conversation_id") @db.Uuid
+  question       String
+  resolvedAt     DateTime? @map("resolved_at") @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([conversationId])
+  @@map("unanswered_questions")
+}
+
+/// AI tokens used per workspace per calendar month (UTC), for the spend cap.
+model UsageMonth {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  workspaceId  String   @map("workspace_id") @db.Uuid
+  month        String
+  inputTokens  Int      @default(0) @map("input_tokens")
+  outputTokens Int      @default(0) @map("output_tokens")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, month])
+  @@map("usage_months")
 }
