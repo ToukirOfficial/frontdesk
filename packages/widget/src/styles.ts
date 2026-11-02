@@ -46,3 +46,26 @@ textarea { flex: 1; resize: none; border: 1px solid var(--fd-line); border-radiu
 }
 @media (prefers-reduced-motion: reduce) { .typing::after { animation: none; } }
 `;
+export const MORE_STYLES = `
+.actions { display: flex; gap: 6px; flex-wrap: wrap; padding: 8px 10px 0; background: var(--fd-bg); border-top: 1px solid var(--fd-line); }
+.chip { border: 1px solid var(--fd-line); background: var(--fd-bg); border-radius: 999px; padding: 5px 11px; font-size: 13px; cursor: pointer; }
+.chip:hover { border-color: var(--fd-brand); }
+.sheet { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; background: var(--fd-bg); }
+.sheet[hidden], .log[hidden], form.chat[hidden], .actions[hidden] { display: none; }
+.sheet h3 { margin: 0; font-size: 16px; }
+.back { align-self: flex-start; border: 0; background: transparent; color: var(--fd-brand); cursor: pointer; padding: 0; font-weight: 600; }
+.field { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.field input, .field textarea { border: 1px solid var(--fd-line); border-radius: 8px; padding: 8px 10px; background: #fff; }
+.check { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--fd-muted); }
+.check input { margin-top: 3px; }
+.primary { border: 0; border-radius: 10px; background: var(--fd-brand); color: #fff; padding: 10px 14px; cursor: pointer; font-weight: 600; }
+.primary:disabled { opacity: .5; }
+.option { display: block; width: 100%; text-align: left; border: 1px solid var(--fd-line); background: var(--fd-bg); border-radius: 10px; padding: 10px 12px; cursor: pointer; }
+.option:hover { border-color: var(--fd-brand); }
+.slots { display: flex; flex-wrap: wrap; gap: 6px; }
+.slot { border: 1px solid var(--fd-line); background: var(--fd-bg); border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+.slot:hover { border-color: var(--fd-brand); }
+.day { margin: 6px 0 4px; font-size: 13px; font-weight: 600; }
+.muted { color: var(--fd-muted); font-size: 13px; margin: 0; }
+.form-error { color: #b42318; font-size: 13px; margin: 0; }
+`;
