@@ -39,6 +39,13 @@ Decisions made where `PRD.md` and `plan.md` leave room. Each is easy to change.
 - **Every role can take over a chat.** Only the person who took it over can reply. They, or an owner or admin, can hand it back to the assistant.
 - **A removed team member** keeps live updates in an already-open Conversations tab until it reconnects. Every action still needs a membership check, and their access token expires within 15 minutes.
 
+## Limits, insights and retention
+
+- **Spend cap** counts input plus output tokens (cached reads included) per calendar month in UTC. The default is 2,000,000, roughly 1,000 answers. Owners and admins can change it, and the overview shows usage. At the cap, the widget offers leave-a-message only; enquiries still work.
+- **Retention** (default 90 days, 1–3650) is set per workspace. Every night at 03:15 UK time, the worker deletes conversations (with their messages), enquiries and unanswered questions older than that. It also clears login codes, refresh tokens, reset links and invites that expired over a day ago. Knowledge and settings are never deleted.
+- **Search** matches message text (case-insensitive) within the workspace only.
+- **Unanswered questions:** "Add answer" turns the question and the answer into an FAQ; "Dismiss" marks it done without adding knowledge.
+
 ## Running locally
 
 - Without `SMTP_URL`, the worker writes each email to `apps/api/tmp/mail/*.eml` (git-ignored) instead of sending it, so you can read your login code. Email contents never go to the logs.
