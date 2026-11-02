@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev --port 8025",
-    "build": "next build",
+    "dev": "node scripts/copy-widget.mjs && next dev --port 8025",
+    "build": "node scripts/copy-widget.mjs && next build",
     "start": "next start --port ${PORT:-8025}",
     "typecheck": "next typegen && tsc --noEmit",
     "lint": "eslint ."
@@ -32,6 +32,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.4",
     "tailwindcss": "^4",
-    "typescript": "6.0.3"
+    "typescript": "6.0.3",
+    "@frontdesk/widget": "workspace:*"
   }
 }

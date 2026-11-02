@@ -28,6 +28,8 @@ export class RedisIoAdapter extends IoAdapter {
     const server = super.createIOServer(port, {
       ...options,
       path: SOCKET_PATH,
+      // No trailing slash, so the path passes through proxies that redirect /path/ to /path (Next.js does).
+      addTrailingSlash: false,
       // The widget runs on customers' sites; origins are checked per workspace on connect.
       cors: { origin: true, credentials: false },
       maxHttpBufferSize: 16 * 1024,

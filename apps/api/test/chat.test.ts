@@ -43,6 +43,7 @@ const connect = (key: string, token: string, origin?: string): Promise<Socket> =
   new Promise((resolve, reject) => {
     const socket = io(`${base}/visitor`, {
       path: '/api/socket.io',
+      addTrailingSlash: false,
       transports: ['websocket'],
       auth: { key, token },
       extraHeaders: origin ? { origin } : {},

@@ -21,6 +21,8 @@ const nextConfig: NextConfig = {
           { key: 'X-Frame-Options', value: 'DENY' },
         ],
       },
+      // The widget is loaded by customers' sites; cache it for an hour.
+      { source: '/widget.js', headers: [{ key: 'Cache-Control', value: 'public, max-age=3600' }] },
       // Keep invite and reset tokens out of Referer headers sent to other sites.
       { source: '/invite/:token*', headers: [{ key: 'Referrer-Policy', value: 'no-referrer' }] },
       { source: '/reset-password', headers: [{ key: 'Referrer-Policy', value: 'no-referrer' }] },
