@@ -31,6 +31,15 @@ const configSchema = z.object({
   /** Where the local model is downloaded to on first use. */
   MODEL_CACHE_DIR: z.string().min(1).default('./storage/models'),
   OPENAI_API_KEY: z.string().optional().default(''),
+  /** Chat replies: anthropic (default) or openai. fake: tests only. */
+  AI_PROVIDER: z.enum(['anthropic', 'openai', 'fake']).default('anthropic'),
+  ANTHROPIC_API_KEY: z.string().optional().default(''),
+  ANTHROPIC_MODEL: z.string().min(1).default('claude-opus-5-5'),
+  /** How hard the model thinks. A receptionist's short answers do well at low. */
+  ANTHROPIC_EFFORT: z.enum(['low', 'medium', 'high']).default('low'),
+  /** Server-side fallback when a request is declined (supported on Opus 5.5, Fable 5.1, Sonnet 5.5). off for Haiku. */
+  ANTHROPIC_FALLBACKS: z.enum(['default', 'off']).default('default'),
+  OPENAI_CHAT_MODEL: z.string().min(1).default('gpt-4.1-mini'),
   /**
    * Lets server-side fetches (website import, Slotwise) reach private and loopback addresses. For local development
    * and tests only (e.g. a Slotwise on localhost); refused in production.
@@ -53,6 +62,9 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
   }
   if (config.NODE_ENV === 'production' && config.ALLOW_PRIVATE_URLS) {
     throw new Error('ALLOW_PRIVATE_URLS must not be set in production');
+  }
+  if (config.AI_PROVIDER === 'fake' && config.NODE_ENV !== 'test') {
+    throw new Error('AI_PROVIDER=fake is for tests only');
   }
   if (config.EMBEDDING_PROVIDER === 'fake' && config.NODE_ENV !== 'test') {
     throw new Error('EMBEDDING_PROVIDER=fake is for tests only');
