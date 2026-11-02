@@ -11,3 +11,17 @@ allowBuilds:
   unrs-resolver: false
   sharp: false
   '@scarf/scarf': false
+# Next.js 16.4.4 is a security release newer than pnpm's minimum release age; allowed on purpose (see ASSUMPTIONS.md).
+minimumReleaseAgeExclude:
+  - '@next/env@16.4.4'
+  - '@next/eslint-plugin-next@16.4.4'
+  - '@next/swc-darwin-arm64@16.4.4'
+  - '@next/swc-darwin-x64@16.4.4'
+  - '@next/swc-linux-arm64-gnu@16.4.4'
+  - '@next/swc-linux-arm64-musl@16.4.4'
+  - '@next/swc-linux-x64-gnu@16.4.4'
+  - '@next/swc-linux-x64-musl@16.4.4'
+  - '@next/swc-win32-arm64-msvc@16.4.4'
+  - '@next/swc-win32-x64-msvc@16.4.4'
+  - eslint-config-next@16.4.4
+  - next@16.4.4
