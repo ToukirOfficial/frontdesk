@@ -15,6 +15,7 @@ import { RateLimiter } from '../common/rate-limit.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { RedisService } from '../redis/redis.service.js';
 import { ConversationsService } from '../handover/conversations.service.js';
+import { UsageService } from '../insights/usage.service.js';
 import { AssistantService } from './assistant.service.js';
 import { conversationRoom, RealtimeService } from './realtime.service.js';
 import { clientIp } from './client-ip.js';
@@ -47,6 +48,7 @@ export class VisitorGateway implements OnGatewayInit, OnGatewayConnection {
     @Inject(RateLimiter) private readonly limiter: RateLimiter,
     @Inject(RealtimeService) private readonly realtime: RealtimeService,
     @Inject(ConversationsService) private readonly conversations: ConversationsService,
+    @Inject(UsageService) private readonly usage: UsageService,
   ) {}
 
   afterInit(ns: Namespace): void {
@@ -107,8 +109,19 @@ export class VisitorGateway implements OnGatewayInit, OnGatewayConnection {
       this.realtime.toVisitor(conversation.id, 'message', dto);
       this.realtime.staffMessage(data.workspaceId, conversation.id, dto);
 
-      // While a person has the chat, the assistant stays quiet.
-      if (conversation.mode === 'ai') await this.answer(data, parsed.data.text);
+      // While a person has the chat, the assistant stays quiet. Over the monthly cap, it's leave-a-message only.
+      if (conversation.mode === 'ai') {
+        if (await this.usage.capReached(data.workspaceId)) {
+          await this.conversations.system(
+            data.workspaceId,
+            conversation.id,
+            'Our assistant isn’t available right now. Please leave a message and the team will get back to you.',
+          );
+          this.realtime.toVisitor(conversation.id, 'handover:unavailable');
+        } else {
+          await this.answer(data, parsed.data.text);
+        }
+      }
       await this.conversations.broadcast(data.workspaceId, conversation.id);
       return { ok: true };
     } finally {

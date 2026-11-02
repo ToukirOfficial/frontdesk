@@ -28,6 +28,7 @@ import { APP_CONFIG, type AppConfig } from '../config.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { BookingService } from '../booking/booking.service.js';
 import { EnquiriesService } from '../handover/enquiries.service.js';
+import { UsageService } from '../insights/usage.service.js';
 import { avatarPath } from './avatars.js';
 import { WidgetService } from './widget.service.js';
 
@@ -45,6 +46,7 @@ export class WidgetController {
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     @Inject(EnquiriesService) private readonly enquiries: EnquiriesService,
     @Inject(BookingService) private readonly booking: BookingService,
+    @Inject(UsageService) private readonly usage: UsageService,
   ) {}
 
   /** Leave a message. Works even when the assistant is switched off (e.g. the monthly cap is reached). */
@@ -109,7 +111,7 @@ export class WidgetController {
     await this.limiter.hit(`widget-config:ip:${req.ip}`, 120, 60);
     const info = await this.widgets.byKey(p.publicKey);
     this.widgets.checkOrigin(info, req.get('origin'));
-    return this.widgets.config(info, 'chat');
+    return this.widgets.config(info, (await this.usage.capReached(info.workspaceId)) ? 'message' : 'chat');
   }
 
   @Post('session')

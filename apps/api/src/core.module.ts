@@ -5,7 +5,7 @@ import { RateLimiter } from './common/rate-limit.js';
 import { APP_CONFIG, type AppConfig } from './config.js';
 import { MailQueue } from './mail/mail.queue.js';
 import { PrismaService } from './prisma/prisma.service.js';
-import { EMAIL_QUEUE, KNOWLEDGE_QUEUE } from './queues.js';
+import { EMAIL_QUEUE, KNOWLEDGE_QUEUE, MAINTENANCE_QUEUE } from './queues.js';
 import { RedisService, redisOptions } from './redis/redis.service.js';
 
 const shared = [PrismaService, RedisService, RateLimiter, MailQueue];
@@ -22,7 +22,7 @@ export class CoreModule {
           connection: { ...redisOptions(config.REDIS_URL), maxRetriesPerRequest: null },
           prefix: `${config.REDIS_PREFIX}:bull`,
         }),
-        BullModule.registerQueue({ name: EMAIL_QUEUE }, { name: KNOWLEDGE_QUEUE }),
+        BullModule.registerQueue({ name: EMAIL_QUEUE }, { name: KNOWLEDGE_QUEUE }, { name: MAINTENANCE_QUEUE }),
         JwtModule.register({
           secret: config.JWT_SECRET,
           signOptions: { algorithm: 'HS256' },

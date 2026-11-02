@@ -16,10 +16,16 @@ export class ConversationsService {
     @Inject(RealtimeService) private readonly realtime: RealtimeService,
   ) {}
 
-  /** Newest activity first. `cursor` is the id of the last conversation on the previous page. */
-  async list(auth: WorkspaceAuth, cursor?: string): Promise<ConversationList> {
+  /** Newest activity first, optionally only those with a message containing `q`. `cursor` = last id of the previous page. */
+  async list(auth: WorkspaceAuth, cursor?: string, q?: string): Promise<ConversationList> {
+    const search = q?.trim();
     const rows = await this.prisma.conversation.findMany({
-      where: { workspaceId: auth.workspaceId, messages: { some: {} } },
+      where: {
+        workspaceId: auth.workspaceId,
+        messages: search
+          ? { some: { workspaceId: auth.workspaceId, content: { contains: search, mode: 'insensitive' } } }
+          : { some: {} },
+      },
       orderBy: [{ lastMessageAt: 'desc' }, { id: 'desc' }],
       take: PAGE + 1,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),

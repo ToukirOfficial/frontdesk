@@ -23,6 +23,8 @@ import { ConversationsController } from './handover/conversations.controller.js'
 import { ConversationsService } from './handover/conversations.service.js';
 import { EnquiriesService } from './handover/enquiries.service.js';
 import { StaffGateway } from './handover/staff.gateway.js';
+import { InsightsController } from './insights/insights.controller.js';
+import { UsageService } from './insights/usage.service.js';
 import { APP_CONFIG } from './config.js';
 import { VectorStore } from './knowledge/vector-store.js';
 import { HealthController } from './health/health.controller.js';
@@ -48,12 +50,14 @@ class WorkspacesModule {}
 @Module({ controllers: [BusinessController], providers: [BusinessService], exports: [BusinessService] })
 class BusinessModule {}
 
-@Module({ controllers: [KnowledgeController], providers: [KnowledgeService] })
+@Module({ controllers: [KnowledgeController], providers: [KnowledgeService], exports: [KnowledgeService] })
 class KnowledgeModule {}
 
 @Module({
-  controllers: [WidgetController, ConversationsController],
+  imports: [KnowledgeModule],
+  controllers: [WidgetController, ConversationsController, InsightsController],
   providers: [
+    UsageService,
     WidgetService,
     RealtimeService,
     ConversationsService,

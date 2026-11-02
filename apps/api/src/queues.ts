@@ -5,3 +5,4 @@ export interface KnowledgeJob {
   workspaceId: string;
   sourceId: string;
 }
+export const MAINTENANCE_QUEUE = 'maintenance';

@@ -8,16 +8,14 @@ import {
   type ConversationSummary,
   conversationSummarySchema,
   chatMessageSchema,
+  conversationListQuerySchema,
   staffReplyBodySchema,
   workspaceParamsSchema,
 } from '@frontdesk/shared';
-import { z } from 'zod';
 import { AnyMember, Member, type WorkspaceAuth } from '../common/auth.js';
 import { RateLimiter } from '../common/rate-limit.js';
 import { Returns } from '../common/schema.js';
 import { ConversationsService } from './conversations.service.js';
-
-const listQuerySchema = z.object({ cursor: z.uuid().optional() });
 
 /** Every member (owner, admin, staff) can see conversations and take them over. */
 @Controller('workspaces/:workspaceId/conversations')
@@ -32,10 +30,10 @@ export class ConversationsController {
   @Returns(conversationListSchema)
   list(
     @Param({ schema: workspaceParamsSchema }) _p: unknown,
-    @Query({ schema: listQuerySchema }) q: { cursor?: string },
+    @Query({ schema: conversationListQuerySchema }) q: { cursor?: string; q?: string },
     @Member() auth: WorkspaceAuth,
   ): Promise<ConversationList> {
-    return this.conversations.list(auth, q.cursor);
+    return this.conversations.list(auth, q.cursor, q.q);
   }
 
   @Get(':conversationId')
