@@ -97,6 +97,10 @@ model Workspace {
 
   memberships Membership[]
   invites     Invite[]
+  business    BusinessProfile?
+  assistant   AssistantSettings?
+  sources     KnowledgeSource[]
+  chunks      KnowledgeChunk[]
 
   @@map("workspaces")
 }
@@ -134,4 +138,109 @@ model Invite {
   @@index([workspaceId])
   @@index([email])
   @@map("invites")
+}
+
+enum Preset {
+  general
+  law
+  clinic
+}
+
+enum SourceType {
+  faq
+  text
+  file
+  url
+}
+
+enum SourceStatus {
+  processing
+  ready
+  failed
+}
+
+/// Structured business details. Always given to the assistant, as reference data.
+model BusinessProfile {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  workspaceId  String   @unique @map("workspace_id") @db.Uuid
+  name         String   @default("")
+  address      String   @default("")
+  /// { mon: { closed, open, close }, … , notes }
+  openingHours Json     @map("opening_hours")
+  email        String   @default("")
+  phone        String   @default("")
+  bookingUrl   String   @default("") @map("booking_url")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@map("business_profiles")
+}
+
+model AssistantSettings {
+  id                String   @id @default(uuid(7)) @db.Uuid
+  workspaceId       String   @unique @map("workspace_id") @db.Uuid
+  preset            Preset   @default(general)
+  rules             String   @default("")
+  slotwiseBaseUrl   String?  @map("slotwise_base_url")
+  /// AES-256-GCM sealed API key. Never returned by the API.
+  slotwiseKeyCipher String?  @map("slotwise_key_cipher")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@map("assistant_settings")
+}
+
+model KnowledgeSource {
+  id          String       @id @default(uuid(7)) @db.Uuid
+  workspaceId String       @map("workspace_id") @db.Uuid
+  type        SourceType
+  title       String
+  /// FAQ question (type faq)
+  question    String?
+  /// Plain text (text) or FAQ answer (faq)
+  content     String?
+  /// Stored file name inside STORAGE_DIR (file); never a user-supplied path
+  storedName  String?      @map("stored_name")
+  mimeType    String?      @map("mime_type")
+  sizeBytes   Int?         @map("size_bytes")
+  /// Start URL (url)
+  url         String?
+  /// Page limit for a website import (url)
+  maxPages    Int?         @map("max_pages")
+  status      SourceStatus @default(processing)
+  error       String?
+  chunkCount  Int          @default(0) @map("chunk_count")
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  chunks    KnowledgeChunk[]
+
+  @@index([workspaceId, createdAt])
+  @@map("knowledge_sources")
+}
+
+/// One embedded piece of knowledge. workspaceId is copied here so every vector search filters on it directly.
+model KnowledgeChunk {
+  id          String                       @id @default(uuid(7)) @db.Uuid
+  workspaceId String                       @map("workspace_id") @db.Uuid
+  sourceId    String                       @map("source_id") @db.Uuid
+  position    Int
+  content     String
+  /// Page URL for imported websites
+  pageUrl     String?                      @map("page_url")
+  embedding   Unsupported("vector(384)")
+  createdAt   DateTime                     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  source    KnowledgeSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([sourceId])
+  @@map("knowledge_chunks")
 }

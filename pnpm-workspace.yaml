@@ -11,6 +11,9 @@ allowBuilds:
   unrs-resolver: false
   sharp: false
   '@scarf/scarf': false
+  # CPU binaries are bundled; the script only downloads optional CUDA files.
+  onnxruntime-node: false
+  protobufjs: false
 # Next.js 16.4.4 is a security release newer than pnpm's minimum release age; allowed on purpose (see ASSUMPTIONS.md).
 minimumReleaseAgeExclude:
   - '@next/env@16.4.4'
