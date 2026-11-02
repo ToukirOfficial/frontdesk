@@ -89,7 +89,8 @@ export class WidgetService {
    * (scripts, curl) pass this check: origin checks only stop other websites, which is why rate limits also apply.
    */
   checkOrigin(info: WidgetInfo, origin: string | undefined): void {
-    if (!origin || info.allowedOrigins.length === 0) return;
+    // The public demo's widget must keep working on /demo whatever a visitor types into its settings.
+    if (!origin || info.allowedOrigins.length === 0 || info.isDemo) return;
     if (!info.allowedOrigins.includes(origin)) {
       throw new AppError(403, ErrorCode.FORBIDDEN, 'This website isn’t allowed to use this chat.');
     }

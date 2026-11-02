@@ -27,6 +27,10 @@ export const DEMO_RULES = [
   'If someone asks about a specific injury, suggest booking an assessment rather than describing treatment.',
 ].join('\n');
 
+/** The shared login behind "Open the demo dashboard" (DEMO_MODE only). It has no usable password. */
+export const DEMO_USER_EMAIL = 'demo@frontdesk.example';
+export const DEMO_USER_NAME = 'Demo visitor';
+
 export const DEMO_GREETING = 'Hello! I’m the Riverside Physio assistant. Ask me about treatments, prices or opening hours.';
 
 export const DEMO_FAQS: { question: string; answer: string }[] = [

@@ -5,7 +5,7 @@ import { AiResolver } from '../src/ai/ai-resolver.js';
 import { DemoService } from '../src/demo/demo.service.js';
 import { KNOWLEDGE_QUEUE } from '../src/queues.js';
 import { redisOptions } from '../src/redis/redis.service.js';
-import { nextIp, ORIGIN, PASSWORD, registerOwner, reset, startApp, type TestApp, as } from './helpers.js';
+import { as, cookiesOf, nextIp, ORIGIN, PASSWORD, registerOwner, reset, startApp, type TestApp } from './helpers.js';
 
 describe('demo mode', () => {
   let t: TestApp;
@@ -58,6 +58,58 @@ describe('demo mode', () => {
   });
 });
 
+describe('the demo dashboard', () => {
+  let t: TestApp;
+  beforeAll(async () => {
+    t = await startApp({ DEMO_MODE: 'true' });
+  });
+  afterAll(() => t.close());
+  beforeEach(() => reset(t));
+
+  it('one button signs in as an admin of the demo clinic only, with no password or code', async () => {
+    await t.http.post('/api/auth/demo').set('Origin', ORIGIN).set('X-Forwarded-For', nextIp()).expect(404); // not seeded yet
+    const id = await t.app.get(DemoService).seed();
+    const res = await t.http.post('/api/auth/demo').set('Origin', ORIGIN).set('X-Forwarded-For', nextIp()).expect(200);
+    const cookie = cookiesOf(res);
+    const list = await t.http.get('/api/workspaces').set('Cookie', cookie).expect(200);
+    expect(list.body.items).toEqual([expect.objectContaining({ id, role: 'admin', isDemo: true })]);
+    // Admin, not owner: can't delete the workspace.
+    await as(t, { cookie }).delete(`/api/workspaces/${id}`).expect(403);
+    // The shared account can't be logged into with a password.
+    await t.http
+      .post('/api/auth/login')
+      .set('Origin', ORIGIN)
+      .set('X-Forwarded-For', nextIp())
+      .send({ email: 'demo@frontdesk.example', password: PASSWORD })
+      .expect(401);
+  });
+
+  it('no avatar or file uploads, and the nightly reset restores the knowledge too', async () => {
+    const id = await t.app.get(DemoService).seed();
+    const cookie = cookiesOf(await t.http.post('/api/auth/demo').set('Origin', ORIGIN).set('X-Forwarded-For', nextIp()).expect(200));
+    const png = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360000000000500010d0a2db40000000049454e44ae426082', 'hex');
+    const avatar = await t.http.post(`/api/workspaces/${id}/widget/avatar`).set('Origin', ORIGIN).set('Cookie', cookie).attach('file', png, 'a.png');
+    expect(avatar.body.errorCode).toBe('DEMO_MODE');
+    const upload = await t.http.post(`/api/workspaces/${id}/knowledge/upload`).set('Origin', ORIGIN).set('Cookie', cookie).attach('file', Buffer.from('%PDF-1.4\n'), 'a.pdf');
+    expect(upload.body.errorCode).toBe('DEMO_MODE');
+
+    const before = await t.prisma.knowledgeSource.count({ where: { workspaceId: id } });
+    await t.prisma.knowledgeSource.deleteMany({ where: { workspaceId: id, type: 'faq' } });
+    await t.prisma.knowledgeSource.create({ data: { workspaceId: id, type: 'text', title: 'Defaced', content: 'Something rude' } });
+    await t.app.get(DemoService).reset();
+    expect(await t.prisma.knowledgeSource.count({ where: { workspaceId: id } })).toBe(before);
+    expect(await t.prisma.knowledgeSource.count({ where: { workspaceId: id, title: 'Defaced' } })).toBe(0);
+  });
+
+  it('the demo widget works whatever a visitor types into allowed sites', async () => {
+    const id = await t.app.get(DemoService).seed();
+    await t.prisma.workspace.update({ where: { id }, data: { allowedOrigins: ['https://elsewhere.example'] } });
+    const key = (await t.http.get('/api/demo').expect(200)).body.publicKey;
+    await t.redis.del(`widget:${key}`);
+    await t.http.get(`/api/widget/${key}/config`).set('Origin', ORIGIN).expect(200);
+  });
+});
+
 describe('without demo mode', () => {
   let t: TestApp;
   beforeAll(async () => {
@@ -68,6 +120,7 @@ describe('without demo mode', () => {
 
   it('has no demo endpoint and allows sign-up and new workspaces', async () => {
     await t.http.get('/api/demo').expect(404);
+    await t.http.post('/api/auth/demo').set('Origin', ORIGIN).set('X-Forwarded-For', nextIp()).expect(404);
     const owner = await registerOwner(t);
     await as(t, owner).post('/api/workspaces', { name: 'Second shop' }).expect(201);
   });

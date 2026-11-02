@@ -26,6 +26,8 @@ const PUBLIC_ROUTES = new Set([
   'POST /invites/accept',
   'GET /health',
   'GET /demo',
+  // DEMO_MODE only (404 otherwise): the demo dashboard's shared sign-in.
+  'POST /auth/demo',
   // The widget, on customers' websites. Checked against the workspace's allowed sites and rate-limited.
   'GET /widget/:publicKey/config',
   'POST /widget/:publicKey/session',

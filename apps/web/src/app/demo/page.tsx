@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Script from 'next/script';
+import { DemoLoginButton } from '@/components/demo-login';
 import { demoKey } from '@/lib/demo';
 
 export const dynamic = 'force-dynamic';
@@ -22,6 +23,9 @@ export default async function DemoPage() {
         This is a demo of Frontdesk on a made-up clinic website. The chat in the corner shows sample answers to suggested questions;
         add your own AI key in the chat for live answers. Conversations reset every night.
       </p>
+      <div className="flex justify-center bg-[#22313a] px-4 pb-3 font-sans">
+        <DemoLoginButton className="w-full max-w-64 [&_button]:bg-white [&_button]:text-[#22313a]" />
+      </div>
       <header className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-4 px-4 py-6">
         <p className="text-2xl font-semibold">Riverside Physio</p>
         <nav className="flex gap-5 font-sans text-sm" aria-label="Demo site">

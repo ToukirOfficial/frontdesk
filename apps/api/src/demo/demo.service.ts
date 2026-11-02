@@ -8,7 +8,9 @@ import { KNOWLEDGE_QUEUE, type KnowledgeJob } from '../queues.js';
 import { RedisService } from '../redis/redis.service.js';
 import { widgetCacheKey } from '../chat/widget.service.js';
 import { assistantContextKey } from '../business/business.service.js';
-import { DEMO_BUSINESS, DEMO_FAQS, DEMO_GREETING, DEMO_PAGES, DEMO_RULES } from './clinic.js';
+import { hashPassword } from '../auth/passwords.js';
+import { randomToken } from '../common/crypto.js';
+import { DEMO_BUSINESS, DEMO_FAQS, DEMO_GREETING, DEMO_PAGES, DEMO_RULES, DEMO_USER_EMAIL, DEMO_USER_NAME } from './clinic.js';
 
 /** The public demo's fictional clinic: created if missing, reset every night (DEMO_MODE only). */
 @Injectable()
@@ -47,6 +49,19 @@ export class DemoService {
       update: { ...assistant, slotwiseBaseUrl: null, slotwiseKeyCipher: null, avatarName: null },
     });
 
+    // The demo dashboard's shared login: an admin of the clinic (not the owner, so it can't delete the workspace or
+    // manage members). Its password is random and never stored anywhere: it signs in only through /auth/demo.
+    const user = await this.prisma.user.upsert({
+      where: { email: DEMO_USER_EMAIL },
+      create: { email: DEMO_USER_EMAIL, name: DEMO_USER_NAME, passwordHash: await hashPassword(randomToken()), emailVerifiedAt: new Date() },
+      update: { name: DEMO_USER_NAME },
+    });
+    await this.prisma.membership.upsert({
+      where: { workspaceId_userId: { workspaceId: ws.id, userId: user.id } },
+      create: { workspaceId: ws.id, userId: user.id, role: 'admin' },
+      update: { role: 'admin' },
+    });
+
     if ((await this.prisma.knowledgeSource.count({ where: { workspaceId: ws.id } })) === 0) {
       const rows = await this.prisma.$transaction([
         ...DEMO_FAQS.map((f) =>
@@ -76,6 +91,11 @@ export class DemoService {
         this.prisma.unansweredQuestion.deleteMany({ where: { workspaceId: ws.id } }),
       ]);
       await this.prisma.aiSettings.deleteMany({ where: { workspaceId: ws.id } });
+      // Knowledge goes back to the original clinic too (visitors can edit it in the demo dashboard).
+      await this.prisma.$transaction([
+        this.prisma.knowledgeSource.deleteMany({ where: { workspaceId: ws.id } }),
+        this.prisma.invite.deleteMany({ where: { workspaceId: ws.id } }),
+      ]);
     }
     await this.ai.deleteAllDemoKeys();
     await this.seed();
