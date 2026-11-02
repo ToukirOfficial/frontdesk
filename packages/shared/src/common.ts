@@ -26,6 +26,9 @@ export const ErrorCode = {
   SESSION_EXPIRED: 'SESSION_EXPIRED',
   ALREADY_MEMBER: 'ALREADY_MEMBER',
   DEMO_MODE: 'DEMO_MODE',
+  FILE_REJECTED: 'FILE_REJECTED',
+  URL_REJECTED: 'URL_REJECTED',
+  NOT_EDITABLE: 'NOT_EDITABLE',
 } as const;
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
 
