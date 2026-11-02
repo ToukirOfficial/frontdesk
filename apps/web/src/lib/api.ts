@@ -44,12 +44,13 @@ const toLogin = () => {
 
 /** Calls the NestJS API through the same-origin /api rewrite. Cookies carry the session. */
 export async function api<T>(path: string, opts: Options = {}): Promise<T> {
+  const isForm = typeof FormData !== 'undefined' && opts.body instanceof FormData;
   const send = () =>
     fetch(`/api${path}`, {
       method: opts.method ?? 'GET',
       credentials: 'same-origin',
-      headers: opts.body !== undefined ? { 'content-type': 'application/json' } : undefined,
-      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      headers: opts.body !== undefined && !isForm ? { 'content-type': 'application/json' } : undefined,
+      body: opts.body === undefined ? undefined : isForm ? (opts.body as FormData) : JSON.stringify(opts.body),
     });
 
   let res = await send();

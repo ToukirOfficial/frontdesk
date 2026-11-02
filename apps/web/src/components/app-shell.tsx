@@ -1,7 +1,7 @@
 'use client';
 
 import type { WorkspaceList } from '@frontdesk/shared';
-import { Check, ChevronsUpDown, Home, LogOut, Menu, Plus, Users } from 'lucide-react';
+import { BookOpen, Bot, Building2, Check, ChevronsUpDown, Home, LogOut, Menu, Plus, Users } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -30,6 +30,9 @@ interface NavItem {
 
 const nav = (id: string): NavItem[] => [
   { href: `/w/${id}`, label: 'Overview', icon: Home },
+  { href: `/w/${id}/knowledge`, label: 'Knowledge', icon: BookOpen, manageOnly: true },
+  { href: `/w/${id}/business`, label: 'Business details', icon: Building2, manageOnly: true },
+  { href: `/w/${id}/assistant`, label: 'Assistant', icon: Bot, manageOnly: true },
   { href: `/w/${id}/team`, label: 'Team', icon: Users, manageOnly: true },
 ];
 
