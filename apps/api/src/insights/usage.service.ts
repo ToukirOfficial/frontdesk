@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { Usage } from '@frontdesk/shared';
+import { AiResolver } from '../ai/ai-resolver.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 
 export const currentMonth = () => new Date().toISOString().slice(0, 7); // UTC calendar month
@@ -7,7 +8,10 @@ export const currentMonth = () => new Date().toISOString().slice(0, 7); // UTC c
 /** The monthly AI spend cap, counted in tokens (input + output). */
 @Injectable()
 export class UsageService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(AiResolver) private readonly ai: AiResolver,
+  ) {}
 
   async capReached(workspaceId: string): Promise<boolean> {
     const [ws, usage] = await Promise.all([
@@ -22,7 +26,7 @@ export class UsageService {
     const month = currentMonth();
     const since = new Date(`${month}-01T00:00:00Z`);
     const [ws, usage, conversations, enquiries, openUnanswered] = await Promise.all([
-      this.prisma.workspace.findUniqueOrThrow({ where: { id: workspaceId }, select: { monthlyTokenCap: true, retentionDays: true } }),
+      this.prisma.workspace.findUniqueOrThrow({ where: { id: workspaceId }, select: { monthlyTokenCap: true, retentionDays: true, isDemo: true } }),
       this.prisma.usageMonth.findUnique({ where: { workspaceId_month: { workspaceId, month } } }),
       this.prisma.conversation.count({ where: { workspaceId, createdAt: { gte: since }, messages: { some: {} } } }),
       this.prisma.enquiry.count({ where: { workspaceId, createdAt: { gte: since } } }),
@@ -40,6 +44,7 @@ export class UsageService {
       enquiries,
       openUnanswered,
       retentionDays: ws.retentionDays,
+      ai: await this.ai.source(workspaceId, ws.isDemo),
     };
   }
 }

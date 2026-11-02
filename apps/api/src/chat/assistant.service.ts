@@ -1,13 +1,14 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { openingHoursSchema, type Preset, type SourceRef } from '@frontdesk/shared';
 import { z } from 'zod';
-import { type ChatProvider, CHAT_PROVIDER, type ChatTurn } from '../ai/chat-provider.js';
+import { type ChatProvider, type ChatTurn, classifyProviderError } from '../ai/chat-provider.js';
 import { EMBEDDER, type Embedder } from '../ai/embeddings.js';
 import { ASSISTANT_TOOLS, buildInstructions, buildReference, formatHours, type PromptBusiness } from '../ai/prompts.js';
 import { assistantContextKey } from '../business/business.service.js';
 import { VectorStore } from '../knowledge/vector-store.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { RedisService } from '../redis/redis.service.js';
+import { findReplay } from '../demo/replay.js';
 
 const K = 5;
 const HISTORY = 12;
@@ -49,10 +50,16 @@ export class AssistantService {
     @Inject(RedisService) private readonly redis: RedisService,
     @Inject(VectorStore) private readonly vectors: VectorStore,
     @Inject(EMBEDDER) private readonly embedder: Embedder,
-    @Inject(CHAT_PROVIDER) private readonly provider: ChatProvider,
   ) {}
 
-  async reply(workspaceId: string, conversationId: string, question: string, onText: (t: string) => void): Promise<ReplyResult> {
+  /** `provider` is whichever the AiResolver picked for this message (workspace key, instance key or demo visitor). */
+  async reply(
+    workspaceId: string,
+    conversationId: string,
+    question: string,
+    onText: (t: string) => void,
+    provider: ChatProvider,
+  ): Promise<ReplyResult> {
     try {
       const [ctx, history, hits] = await Promise.all([
         this.context(workspaceId),
@@ -61,7 +68,7 @@ export class AssistantService {
       ]);
       const extracts = hits.map((h, i) => ({ n: i + 1, title: h.sourceTitle, content: h.content }));
 
-      const result = await this.provider.stream(
+      const result = await provider.stream(
         {
           system: buildInstructions({ businessName: ctx.business.name, preset: ctx.preset, rules: ctx.rules }),
           reference: buildReference(ctx.business, extracts),
@@ -111,10 +118,27 @@ export class AssistantService {
         failed: false,
       };
     } catch (err) {
-      // No message content in logs: only the error's type.
-      this.log.error(`Reply failed in workspace ${workspaceId}: ${(err as Error).name}`);
+      // Never the message or the provider's error text (it can echo a key): only a fixed category.
+      this.log.error(`Reply failed in workspace ${workspaceId}: ${classifyProviderError(err)}`);
       return { text: FALLBACK_ERROR, sources: [], unanswered: false, inputTokens: 0, outputTokens: 0, failed: true };
     }
+  }
+
+  /**
+   * The public demo without a visitor key: a recorded sample answer for one of the suggested questions, streamed
+   * like a live one. Costs nothing and records no usage.
+   */
+  async replay(workspaceId: string, conversationId: string, question: string, onText: (t: string) => void): Promise<ReplyResult | null> {
+    const item = findReplay(question);
+    if (!item) return null;
+    for (const word of item.answer.split(/(?<= )/)) {
+      onText(word);
+      await new Promise((r) => setTimeout(r, 15));
+    }
+    if (item.unanswered) {
+      await this.prisma.unansweredQuestion.create({ data: { workspaceId, conversationId, question: question.slice(0, 2000) } });
+    }
+    return { text: item.answer, sources: item.sources, unanswered: item.unanswered, inputTokens: 0, outputTokens: 0, failed: false };
   }
 
   private async context(workspaceId: string): Promise<AssistantContext> {
