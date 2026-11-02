@@ -110,6 +110,17 @@ pnpm eval --dry                # no API calls: checks the set and prompts build 
 
 More small decisions are in [ASSUMPTIONS.md](ASSUMPTIONS.md).
 
+## Security
+
+- Logins need a password **and** a 6-digit code emailed every time. Passwords are hashed with argon2id. Sessions use short-lived httpOnly cookies, and refresh tokens are rotated on every use, with reuse detection.
+- Every endpoint is closed unless it says who may call it (a test enforces this). Every query, vector search and live socket room is scoped to one workspace. Removed team members lose live access at once.
+- AI keys and Slotwise keys are encrypted at rest and never returned or logged.
+- Admin-typed addresses (website import, Slotwise, OpenAI-compatible endpoints) go through an SSRF guard. Uploads are checked by content, stored outside public folders, and Word files are checked for zip bombs before they're read.
+- Rate limits cover login, codes, password reset, chat, enquiries, invites and workspace creation. Emails only go to addresses proven by a login code, so the server can't be used to send messages to strangers.
+- Strict security headers on the dashboard (Content-Security-Policy, no framing, HSTS over HTTPS). Dependencies are updated weekly by Dependabot, and CI actions are pinned to exact commits.
+
+**Found a vulnerability?** Please don’t open a public issue. Report it privately through GitHub’s **Security → Report a vulnerability** on this repository, and you’ll get a reply as soon as possible.
+
 ## Tests
 
 ```bash

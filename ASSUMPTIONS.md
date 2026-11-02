@@ -66,3 +66,12 @@ Decisions made where `PRD.md` and `plan.md` leave room. Each is easy to change.
 ## Versions
 
 - **Next.js 16.4** rather than the 16.3 in the original stack: every 16.3.x release has critical advisories (remote code execution) fixed only in 16.4.1+. Approved on 2026-11-02.
+
+## Security hardening (2026-11-02)
+
+- **Enquiry emails** go to the workspace's owners and admins, plus the business contact email only when it belongs to a member. An address typed into Business details is never mailed on its own, because on an instance with open sign-up anyone could otherwise use it to send spam to strangers. To have enquiries reach a shared inbox, invite that address as staff and set it as the contact email.
+- **Sign-up says "this email already has an account".** That reveals whether an address is registered. It's accepted for usability: it's rate-limited (5 per hour per IP), and login, password reset and invites don't reveal it.
+- **Live dashboard sockets** close when the 15-minute access token expires (the dashboard refreshes and reconnects), and a removed member is taken out of the workspace's live room at once.
+- **Word files** are unpacked with a hard 64 MB limit before the reader sees them. PDFs rely on the page limit and timeout. A crafted PDF could still use a lot of worker memory, but it only affects the background worker, which restarts.
+- **CSP** allows inline scripts, because Next.js needs them to hydrate without per-request nonces. Everything else is limited to this site's own origin.
+- **Postgres and Redis** in docker compose listen only inside the compose network and on 127.0.0.1. Set your own `POSTGRES_PASSWORD` anyway.
