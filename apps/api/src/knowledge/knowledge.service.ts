@@ -122,6 +122,10 @@ export class KnowledgeService {
 
   /** Checks the file's real type from its bytes (not its name), stores it under a random name, queues parsing. */
   async upload(auth: WorkspaceAuth, file: { buffer: Buffer; originalname: string; size: number }): Promise<KnowledgeSource> {
+    // The public demo is shared by strangers: no file hosting there.
+    if ((await this.prisma.workspace.findUnique({ where: { id: auth.workspaceId }, select: { isDemo: true } }))?.isDemo) {
+      throw new AppError(403, ErrorCode.DEMO_MODE, 'File uploads are switched off in the public demo. Add an FAQ or a page of text instead.');
+    }
     const detected = await fileTypeFromBuffer(file.buffer);
     const ext = detected ? ALLOWED_FILES[detected.mime] : undefined;
     if (!detected || !ext) {

@@ -8,6 +8,7 @@ import { APP_CONFIG, type AppConfig } from '../config.js';
 import { MailQueue } from '../mail/mail.queue.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { hashPassword, verifyPassword } from './passwords.js';
+import { DEMO_USER_EMAIL } from '../demo/clinic.js';
 import { type IssuedTokens, SessionsService } from './sessions.service.js';
 
 export const CODE_TTL_SEC = 10 * 60;
@@ -122,6 +123,16 @@ export class AuthService {
       return row.userId;
     });
     await this.sessions.revokeAllForUser(userId); // log out everywhere after a reset
+  }
+
+  /** DEMO_MODE only (the controller checks): signs in as the demo clinic's shared admin, without a password or code. */
+  async demoLogin(): Promise<IssuedTokens> {
+    const user = await this.prisma.user.findFirst({
+      where: { email: DEMO_USER_EMAIL, memberships: { some: { workspace: { isDemo: true } } } },
+      select: { id: true },
+    });
+    if (!user) throw new AppError(404, ErrorCode.NOT_FOUND, 'The demo isn’t ready yet. Try again in a minute.');
+    return this.sessions.start(user.id);
   }
 
   async me(userId: string): Promise<Me> {

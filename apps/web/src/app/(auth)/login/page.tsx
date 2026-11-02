@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useState } from 'react';
 import { CodeStep } from '@/components/code-step';
+import { DemoLoginButton } from '@/components/demo-login';
 import { Field, FormError } from '@/components/field';
 import { Form } from '@/components/form';
 import { Button } from '@/components/ui/button';
@@ -77,6 +78,7 @@ export default function LoginPage() {
         <Suspense>
           <LoginForm />
         </Suspense>
+        <DemoLoginButton checkDemo className="mt-4 border-t pt-4" />
       </CardContent>
     </Card>
   );

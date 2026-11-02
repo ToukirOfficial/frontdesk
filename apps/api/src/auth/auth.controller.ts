@@ -43,7 +43,7 @@ export class AuthController {
   @Post('register')
   @Returns(challengeSchema, 201)
   async register(@Body({ schema: registerBodySchema }) body: RegisterBody, @Req() req: Request): Promise<Challenge> {
-    // A public demo runs on the owner's AI key: nobody else gets an account there.
+    // A public demo has one shared login (POST /auth/demo): nobody gets their own account there.
     if (this.config.DEMO_MODE) throw new AppError(403, ErrorCode.DEMO_MODE, 'This is a public demo, so sign-up is switched off.');
     await this.limiter.hit(`register:ip:${req.ip}`, 5, 60 * 60);
     return this.auth.register(body);
@@ -127,6 +127,18 @@ export class AuthController {
     await this.limiter.hit(`reset:ip:${req.ip}`, 10, 15 * 60);
     await this.auth.resetPassword(body.token, body.password);
     return OK;
+  }
+
+  /** DEMO_MODE only: "Open the demo dashboard" signs in as the demo clinic's shared admin. */
+  @Public()
+  @Post('demo')
+  @Returns(meSchema)
+  async demo(@Req() req: Request, @Res({ passthrough: true }) res: Response): Promise<Me> {
+    if (!this.config.DEMO_MODE) throw new AppError(404, ErrorCode.NOT_FOUND, 'Not found.');
+    await this.limiter.hit(`demo-login:ip:${req.ip}`, 20, 60 * 60);
+    const tokens = await this.auth.demoLogin();
+    setAuthCookies(res, tokens.access, tokens.refresh);
+    return this.auth.me(tokens.userId);
   }
 
   @LoggedIn()

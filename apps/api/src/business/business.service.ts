@@ -101,6 +101,10 @@ export class BusinessService {
 
   /** PNG, JPEG or WebP up to 256 KB, checked by content, stored under a random name. */
   async putAvatar(auth: WorkspaceAuth, file: { buffer: Buffer; size: number }): Promise<AssistantSettings> {
+    // Everyone visiting the demo would see it: no image uploads there.
+    if ((await this.prisma.workspace.findUnique({ where: { id: auth.workspaceId }, select: { isDemo: true } }))?.isDemo) {
+      throw new AppError(403, ErrorCode.DEMO_MODE, 'Avatar uploads are switched off in the public demo.');
+    }
     const type = await fileTypeFromBuffer(file.buffer);
     const ext = type?.mime === 'image/png' ? 'png' : type?.mime === 'image/jpeg' ? 'jpg' : type?.mime === 'image/webp' ? 'webp' : null;
     if (!ext) throw new AppError(400, ErrorCode.FILE_REJECTED, 'Use a PNG, JPEG or WebP image.');
