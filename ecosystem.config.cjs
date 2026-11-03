@@ -1,5 +1,5 @@
 // PM2 processes for a server deploy (see deploy.sh). Each runs from the `current` release and listens on
-// 127.0.0.1 only. Ports and addresses come from the release's .env (a link to the server's shared env file), so
+// 127.0.0.1 only. Ports, addresses and memory caps (WEB_/API_/WORKER_MAX_MEMORY) come from the release's .env (a link to the server's shared env file), so
 // nothing server-specific lives in this repository.
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
@@ -18,7 +18,7 @@ module.exports = {
       cwd: join(__dirname, 'web/apps/web'),
       script: 'server.js',
       env: { NODE_ENV: 'production', HOSTNAME: '127.0.0.1', PORT: env.WEB_PORT, API_URL: env.API_URL },
-      max_memory_restart: '350M',
+      max_memory_restart: env.WEB_MAX_MEMORY || '300M',
     },
     {
       name: 'frontdesk-api',
@@ -26,7 +26,7 @@ module.exports = {
       script: 'dist/main.js',
       node_args: '--env-file=../.env',
       env: { NODE_ENV: 'production', API_HOST: '127.0.0.1' },
-      max_memory_restart: '450M',
+      max_memory_restart: env.API_MAX_MEMORY || '300M',
     },
     {
       // Embedding knowledge (a small local model), website import, file parsing, email, nightly jobs.
@@ -35,7 +35,7 @@ module.exports = {
       script: 'dist/worker.js',
       node_args: '--env-file=../.env',
       env: { NODE_ENV: 'production' },
-      max_memory_restart: '900M',
+      max_memory_restart: env.WORKER_MAX_MEMORY || '350M',
     },
   ],
 };
