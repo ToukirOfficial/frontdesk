@@ -17,3 +17,4 @@ apps/web/public/widget.js
 
 # Server details for ./deploy.sh: never committed (see deploy.env.example)
 deploy.env
+dump.rdb
