@@ -170,7 +170,7 @@ More small decisions are in [ASSUMPTIONS.md](ASSUMPTIONS.md).
 pnpm typecheck && pnpm lint && pnpm test && pnpm build
 ```
 
-147 API tests run against real PostgreSQL and Redis, with a fake AI provider. In tests every provider is the fake one, so no test or CI run can call a real API or need a key. They cover: login with emailed codes, refresh-token rotation and reuse detection, every role and permission, workspace isolation (including vector search across workspaces), rate limits, the monthly spend cap, live handover (including two simultaneous takeovers), SSRF protection, uploads, encryption of stored keys, retention, demo mode, and bring your own key: the app boots with no key, workspace keys are never returned by the API or written to logs, demo keys expire and are deleted, and a workspace can never use another workspace’s key. A test also fails if any endpoint forgets to say who may call it.
+156 API tests run against real PostgreSQL and Redis, with a fake AI provider. In tests every provider is the fake one, so no test or CI run can call a real API or need a key. They cover: login with emailed codes, refresh-token rotation and reuse detection, every role and permission, workspace isolation (including vector search across workspaces), rate limits, the monthly spend cap, live handover (including two simultaneous takeovers), SSRF protection, uploads, encryption of stored keys, retention, demo mode, and bring your own key: the app boots with no key, workspace keys are never returned by the API or written to logs, demo keys expire and are deleted, and a workspace can never use another workspace’s key. A test also fails if any endpoint forgets to say who may call it.
 
 ## Local development
 
